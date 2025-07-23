@@ -9,7 +9,7 @@ import os
 # Configuration
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 7  # 1 week
+ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
 REFRESH_TOKEN_EXPIRE_DAYS = 7  # 1 week
 
 pwd_context = CryptContext(
@@ -36,8 +36,8 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     if expires_delta:
         expire = datetime.now() + expires_delta
     else:
-        expire = datetime.now() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
-    
+        expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -67,7 +67,7 @@ def create_token_pair(professional_id: int, mobile_number: str) -> Dict[str, str
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "expires_in": ACCESS_TOKEN_EXPIRE_DAYS * 24 * 60 * 60  # seconds
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60  # seconds
     }
 
 
@@ -124,6 +124,12 @@ def refresh_access_token(refresh_token: str) -> Optional[Dict[str, str]]:
         
     try:
         professional_id = int(professional_id)
-        return create_token_pair(professional_id, mobile_number)
+        data = {"sub": str(professional_id), "mobile_number": mobile_number}
+        access_token = create_access_token(data)
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60  # seconds
+        }
     except (ValueError, TypeError):
         return None

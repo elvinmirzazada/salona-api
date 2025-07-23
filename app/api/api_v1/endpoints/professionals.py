@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.schemas import Professional, ProfessionalCreate, ProfessionalUpdate
@@ -128,6 +128,7 @@ async def get_professional_by_mobile(
 @router.post("/login", response_model=TokenResponse)
 async def login_professional(
     login_data: LoginRequest,
+    response: Response,
     db: Session = Depends(get_db)
 ) -> TokenResponse:
     """
@@ -153,6 +154,13 @@ async def login_professional(
     
     # Create token pair
     tokens = create_token_pair(professional.id, professional.mobile_number)
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        secure=True,  # only over HTTPS
+        samesite="strict"
+    )
     return TokenResponse(**tokens)
 
 
@@ -171,3 +179,17 @@ async def refresh_token(
         )
     
     return TokenResponse(**tokens)
+
+
+@router.post("/logout")
+async def logout_professional(response: Response):
+    """
+    Logout professional by clearing the refresh token cookie
+    """
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=True,
+        samesite="strict"
+    )
+    return {"message": "Successfully logged out"}
