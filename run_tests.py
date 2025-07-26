@@ -21,6 +21,7 @@ def run_pytest():
         import pytest
         return pytest.main([
             "tests/test_professionals.py", 
+            "tests/test_businesses.py",
             "-v", 
             "--tb=short"
         ])

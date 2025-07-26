@@ -4,7 +4,7 @@ from app.models.models import (
     Professional,
     Business, 
     Category,
-    BusinessCategory,
+    # BusinessCategory,
     ServiceType,
     ServiceCategory,
     Service,

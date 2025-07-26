@@ -53,11 +53,11 @@ class BusinessBase(BaseModel):
     website: Optional[str] = None
     description: Optional[str] = None
     team_size: Optional[int] = 0
-    status: StatusType = StatusType.ACTIVE
+    status: StatusType = StatusType.active
 
 
 class BusinessCreate(BusinessBase):
-    owner_id: int
+    owner_id: int = None
 
 
 class BusinessUpdate(BaseModel):

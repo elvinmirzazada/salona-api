@@ -9,9 +9,9 @@ class GenderType(str, Enum):
 
 
 class StatusType(str, Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    SUSPENDED = "suspended"
+    active = "active"
+    inactive = "inactive"
+    suspended = "suspended"
 
 
 class PriceType(str, Enum):

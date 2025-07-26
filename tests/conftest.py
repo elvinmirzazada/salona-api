@@ -57,6 +57,19 @@ def setup_database():
     finally:
         db.close()
 
+@pytest.fixture(scope="module")
+def setup_database_module():
+    """Create test database tables before each test and drop them after."""
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+    # Create a new session to ensure no cached data remains
+    db = TestingSessionLocal()
+    try:
+        db.execute(text("VACUUM"))  # Clean up the SQLite database
+    finally:
+        db.close()
+
 @pytest.fixture
 def professional_data():
     """Sample professional data for testing."""

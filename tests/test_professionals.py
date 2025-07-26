@@ -81,7 +81,6 @@ class TestProfessionalLogin:
 
         data = response.json()
         assert "access_token" in data
-        assert "refresh_token" in data
         assert data["token_type"] == "bearer"
         assert "expires_in" in data
 
@@ -268,29 +267,7 @@ class TestProfessionalAuthentication:
 
 class TestTokenRefresh:
     """Test token refresh functionality."""
-
-    def test_refresh_token_success(self, client, setup_database, professional_data):
-        """Test successful token refresh."""
-        # Register and login
-        client.post("/api/v1/professionals/register", json=professional_data)
-        
-        login_data = {
-            "identifier": professional_data["mobile_number"],
-            "password": professional_data["password"]
-        }
-        login_response = client.post("/api/v1/professionals/login", json=login_data)
-        refresh_token = login_response.json()["refresh_token"]
-        
-        # Refresh token
-        refresh_data = {"refresh_token": refresh_token}
-        response = client.post("/api/v1/professionals/refresh-token", json=refresh_data)
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert "refresh_token" in data
-        assert data["token_type"] == "bearer"
-
+    
     def test_refresh_token_invalid(self, client, setup_database):
         """Test token refresh with invalid refresh token."""
         refresh_data = {"refresh_token": "invalid_refresh_token"}

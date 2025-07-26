@@ -1,81 +1,70 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.api.dependencies import get_current_active_professional
 from app.db.session import get_db
-from app.schemas.schemas import Business, BusinessCreate, BusinessUpdate, BusinessWithDetails
-from app.services.crud import business as crud_business, professional as crud_professional
+from app.models.models import Professional, Business
+from app.schemas import BusinessCreate, Business as BusinessSchema, BusinessWithDetails
+from app.services import crud as crud_business
 
 router = APIRouter()
 
 
-@router.post("/", response_model=Business, status_code=status.HTTP_201_CREATED)
-def create_business(
+@router.post("/", response_model=BusinessSchema, status_code=status.HTTP_201_CREATED)
+async def create_business(
     *,
     db: Session = Depends(get_db),
-    business_in: BusinessCreate
+    business_in: BusinessCreate,
+    current_professional: Professional = Depends(get_current_active_professional)
 ) -> Business:
     """
     Create a new business.
     """
-    # Verify that the owner (professional) exists
-    professional = crud_professional.get(db=db, id=business_in.owner_id)
-    if not professional:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Professional not found"
-        )
-    
-    business = crud_business.create(db=db, obj_in=business_in)
+    # Set the owner_id from the authenticated professional
+    business_in.owner_id = current_professional.id
+    business = crud_business.business.create(db=db, obj_in=business_in)
     return business
 
 
-@router.get("/{business_id}", response_model=BusinessWithDetails)
-def get_business(
-    business_id: int,
-    db: Session = Depends(get_db)
-) -> Business:
-    """
-    Get business by ID with details.
-    """
-    business = crud_business.get(db=db, id=business_id)
-    if not business:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Business not found"
-        )
-    return business
-
-
-@router.get("/owner/{owner_id}", response_model=List[Business])
-def get_businesses_by_owner(
-    owner_id: int,
+@router.get("/my-businesses", response_model=List[BusinessWithDetails])
+async def get_my_businesses(
+    db: Session = Depends(get_db),
+    current_professional: Professional = Depends(get_current_active_professional),
     skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
+    limit: int = 10,
 ) -> List[Business]:
     """
-    Get all businesses owned by a professional.
+    Get all businesses owned by the authenticated professional.
     """
-    businesses = crud_business.get_multi_by_owner(db=db, owner_id=owner_id, skip=skip, limit=limit)
+    businesses = crud_business.business.get_multi_by_owner(
+        db=db,
+        owner_id=current_professional.id,
+        skip=skip,
+        limit=limit
+    )
     return businesses
 
 
-@router.put("/{business_id}", response_model=Business)
-def update_business(
+@router.get("/{business_id}", response_model=BusinessWithDetails)
+async def get_business(
     *,
     db: Session = Depends(get_db),
     business_id: int,
-    business_in: BusinessUpdate
+    current_professional: Professional = Depends(get_current_active_professional)
 ) -> Business:
     """
-    Update business.
+    Get a specific business by ID.
+    Only the owner can access their business details.
     """
-    business = crud_business.get(db=db, id=business_id)
+    business = crud_business.business.get(db=db, id=business_id)
     if not business:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Business not found"
         )
-    
-    business = crud_business.update(db=db, db_obj=business, obj_in=business_in)
+    if business.owner_id != current_professional.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to access this business"
+        )
     return business

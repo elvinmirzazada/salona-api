@@ -39,11 +39,11 @@ class Business(BaseModel):
     website = Column(String(255))
     description = Column(Text)
     team_size = Column(Integer, default=0)
-    status = Column(SQLAlchemyEnum(StatusType), default=StatusType.ACTIVE)
+    status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
     
     # Relationships
     owner = relationship("Professional", back_populates="businesses")
-    categories = relationship("BusinessCategory", back_populates="business")
+    # categories = relationship("BusinessCategory", back_populates="business")
     service_types = relationship("ServiceType", back_populates="business")
     service_categories = relationship("ServiceCategory", back_populates="business")
     services = relationship("Service", back_populates="business")
@@ -60,20 +60,20 @@ class Category(BaseModel):
     created_at = Column(DateTime, default=func.now())
     
     # Relationships
-    businesses = relationship("BusinessCategory", back_populates="category")
+    # businesses = relationship("BusinessCategory", back_populates="category")
 
 
-class BusinessCategory(BaseModel):
-    __tablename__ = "business_categories"
+# class BusinessCategory(BaseModel):
+#     __tablename__ = "business_categories"
     
-    business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
-    category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True)
-    is_primary = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=func.now())
+#     business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+#     category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True)
+#     is_primary = Column(Boolean, default=False)
+#     created_at = Column(DateTime, default=func.now())
     
-    # Relationships
-    business = relationship("Business", back_populates="categories")
-    category = relationship("Category", back_populates="businesses")
+#     # Relationships
+#     business = relationship("Business", back_populates="categories")
+#     category = relationship("Category", back_populates="businesses")
 
 
 class ServiceType(BaseModel):
