@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.schemas import Appointment, AppointmentCreate, AppointmentUpdate, AppointmentWithDetails
 from app.services.crud import appointment as crud_appointment, service as crud_service, client as crud_client, business as crud_business
+from app.schemas.schemas import Professional
+from app.api.dependencies import get_current_active_professional
 
 router = APIRouter()
 
@@ -13,7 +15,8 @@ router = APIRouter()
 def create_appointment(
     *,
     db: Session = Depends(get_db),
-    appointment_in: AppointmentCreate
+    appointment_in: AppointmentCreate,
+    current_professional: Professional = Depends(get_current_active_professional)
 ) -> Appointment:
     """
     Create a new appointment.

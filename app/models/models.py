@@ -49,6 +49,19 @@ class Business(BaseModel):
     services = relationship("Service", back_populates="business")
     clients = relationship("Client", back_populates="business")
     appointments = relationship("Appointment", back_populates="business")
+    staff = relationship("BusinessStaff", back_populates="business")
+
+class BusinessStaff(BaseModel):
+    __tablename__ = "business_staff"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
+    professional_id = Column(Integer, ForeignKey("professionals.id", ondelete="CASCADE"))
+    is_active = Column(Boolean, default=True)
+    
+    # Relationships
+    business = relationship("Business", back_populates="staff")
+    professional = relationship("Professional")
 
 
 class Category(BaseModel):

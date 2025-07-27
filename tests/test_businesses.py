@@ -161,3 +161,33 @@ class TestBusinessRetrieval:
         response = client.get("/api/v1/businesses/99999", headers=headers)
         assert response.status_code == 404
         assert "Business not found" in response.json()["detail"]
+
+
+class TestBusinessStaffManagement:
+    """Test business staff management functionality."""
+
+    def test_add_business_member(self, client, setup_database_module, professional_data):
+        """Test adding a member to a business."""
+        # Get auth headers from AuthManager
+        headers = AuthManager.get_auth_headers(client, professional_data)
+
+        # Create a business first
+        business_data = {
+            "business_name": "Test Salon",
+            "business_type": "beauty_salon",
+            "email": "test@salon.com",
+            "phone": "+1234567890",
+            "status": "active"
+        }
+        create_response = client.post("/api/v1/businesses/", json=business_data, headers=headers)
+        business_id = create_response.json()["id"]
+
+        # Add a member to the business
+        business_staff_data = {
+            "business_id": business_id
+        }
+        response = client.post("/api/v1/businesses/add-member", json=business_staff_data, headers=headers)
+        assert response.status_code == 201
+
+        business_staff = response.json()
+        assert business_staff["business_id"] == business_id

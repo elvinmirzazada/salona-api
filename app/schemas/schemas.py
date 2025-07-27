@@ -84,6 +84,22 @@ class Business(BusinessBase, TimestampedModel):
     owner_id: int
 
 
+# Staff schemas
+class BusinessStaffBase(BaseModel):
+    is_active: bool = False
+
+class BusinessStaffCreate(BusinessStaffBase):
+    business_id: int
+    professional_id: int = None
+
+class BusinessStaff(BusinessStaffBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    business_id: int
+    professional_id: int
+
+
 # Category schemas
 class CategoryBase(BaseModel):
     name: str

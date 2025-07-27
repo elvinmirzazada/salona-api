@@ -1,13 +1,14 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
-from app.models.models import Business, Service, Client, Appointment, Professional
+from app.models.models import Business, Service, Client, Appointment, Professional, BusinessStaff
 from app.schemas.schemas import (
     BusinessCreate, BusinessUpdate,
     ServiceCreate, ServiceUpdate,
     ClientCreate, ClientUpdate,
     AppointmentCreate, AppointmentUpdate,
-    ProfessionalCreate, ProfessionalUpdate
+    ProfessionalCreate, ProfessionalUpdate, 
+    BusinessStaffCreate
 )
 
 
@@ -57,6 +58,27 @@ class CRUDBusiness:
         return db_obj
     
     def update(self, db: Session, *, db_obj: Business, obj_in: BusinessUpdate) -> Business:
+        update_data = obj_in.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(db_obj, field, value)
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+    
+    
+class CRUDBusinessStaff:
+    def get(self, db: Session, id: int) -> Optional[BusinessStaff]:
+        return db.query(BusinessStaff).filter(BusinessStaff.id == id).first()
+    
+    def create(self, db: Session, *, obj_in: BusinessStaffCreate) -> BusinessStaff:
+        db_obj = BusinessStaff(**obj_in.model_dump())
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+    
+    def update(self, db: Session, *, db_obj: BusinessStaff, obj_in: BusinessStaffCreate) -> BusinessStaff:
         update_data = obj_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_obj, field, value)
@@ -152,3 +174,4 @@ business = CRUDBusiness()
 service = CRUDService()
 client = CRUDClient()
 appointment = CRUDAppointment()
+business_staff = CRUDBusinessStaff()
