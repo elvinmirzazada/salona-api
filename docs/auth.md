@@ -45,12 +45,25 @@ Authorization: Bearer <access_token>
 
 ---
 
-## Endpoints
+---
+ 
+---
 
-### Users
+# Endpoints
 
-#### Sign up
+## User Registration & Company Membership
 
+Users can join the Salona Booking System in two ways:
+
+### 1. Self-Registration + Company Creation
+
+- A new user signs up through /auth/users/signup.
+
+- After verifying email, the user creates a Company Profile (POST /companies).
+
+- This user automatically becomes the admin/owner of that company.
+
+#### - Signup
 POST /api/v1/auth/users/signup
 
 **Body**
@@ -78,7 +91,7 @@ Response Example
 
 --- 
 
-#### Email verification
+#### - Email verification
 
 POST /api/v1/auth/users/verify-email
 
@@ -91,6 +104,112 @@ POST /api/v1/auth/users/verify-email
 200 OK
 
 --- 
+
+#### - Company creation
+
+```
+POST /api/v1/companies
+Authorization: Bearer <access_token>
+```
+
+```json
+{
+  "name": "Glow Studio",
+  "address": "123 Main St",
+  "timezone": "Europe/Tallinn"
+}
+```
+
+Response
+
+```json
+{
+  "id": "uuid-company",
+  "name": "Glow Studio",
+  "owner": { "user_id": "uuid-user", "role": "owner" }
+}
+```
+
+---
+
+### 2. Invitation by Company Admin
+
+A company admin sends an invite to an email address.
+
+The invite generates a unique invitation URL (containing a token).
+
+The recipient accepts the invitation:
+
+- If already registered, the system just links their user to the company.
+
+- If not registered yet, they sign up first, and then the invite binds them to the company.
+
+#### - Invite user
+
+```
+POST /api/v1/companies/{company_id}/members/invite
+Authorization: Bearer <access_token>
+```
+
+```json
+{ "email": "stylist@salona.com", "role": "member" }
+```
+
+Response
+
+```json
+{
+  "invitation_id": "uuid-invite",
+  "company_id": "uuid-company",
+  "email": "stylist@salona.com",
+  "role": "member",
+  "status": "pending",
+  "invitation_url": "https://app.salona.com/invite/uuid-invite-token"
+}
+```
+
+Accept invitation
+```
+POST /api/v1/auth/users/accept-invite
+```
+
+```json
+{
+  "invitation_token": "uuid-invite-token",
+  "password": "********"   // if not registered
+}
+```
+
+Response
+
+```json
+{
+  "user": {
+    "id": "uuid-user",
+    "email": "stylist@salona.com"
+  },
+  "company": {
+    "id": "uuid-company",
+    "name": "Glow Studio",
+    "role": "member"
+  }
+}
+```
+
+
+**Key Notes**
+
+- A user can belong to multiple companies.
+
+- Roles are stored in the company_members table (owner, admin, member).
+
+- Invitation tokens should expire (e.g., 7 days) and be single-use.
+
+- If an invite is re-sent, the old token should be invalidated.
+
+- Admins can revoke pending invitations.
+
+---
 
 #### Login
 
