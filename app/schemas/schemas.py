@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict, PhoneNumber
+from pydantic import BaseModel, EmailStr, ConfigDict
 from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus
 
 
@@ -222,7 +222,7 @@ class CustomerBase(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
-    phone: PhoneNumber
+    phone: str
 
 
 class CustomerCreate(CustomerBase):
@@ -289,7 +289,7 @@ class ServiceWithDetails(Service):
 
 class AppointmentWithDetails(Appointment):
     service: Optional[Service] = None
-    client: Optional[Client] = None
+    client: Optional[Customer] = None
     
 
 class ResponseMessage(BaseModel):

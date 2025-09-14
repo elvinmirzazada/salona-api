@@ -19,8 +19,10 @@ class EmailStatusType(str, Enum):
     secondary = "secondary"
     unverified = "unverified"
 
-class PhoneStatusType(EmailStatusType):
-    pass
+class PhoneStatusType(str, Enum):
+    primary = "primary"
+    secondary = "secondary"
+    unverified = "unverified"
 
 class CustomerStatusType(str, Enum):
     active = "active"
