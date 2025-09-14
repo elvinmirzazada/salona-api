@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, PhoneNumber
 from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus
 
 
@@ -217,24 +217,19 @@ class Service(ServiceBase, TimestampedModel):
     id: int
 
 
-# Client schemas
-class ClientBase(BaseModel):
+# Customer schemas
+class CustomerBase(BaseModel):
     first_name: str
     last_name: str
-    email: Optional[EmailStr] = None
-    phone_number: str
-    birthdate: Optional[date] = None
-    gender: Optional[GenderType] = None
-    preferred_language: str = "en"
-    source: SourceType = SourceType.WALK_IN
-    business_id: int
+    email: EmailStr
+    phone: PhoneNumber
 
 
-class ClientCreate(ClientBase):
-    pass
+class CustomerCreate(CustomerBase):
+    password: str
 
 
-class ClientUpdate(BaseModel):
+class CustomerUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -245,10 +240,12 @@ class ClientUpdate(BaseModel):
     source: Optional[SourceType] = None
 
 
-class Client(ClientBase, TimestampedModel):
+class Customer(CustomerBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
     
     id: int
+    status: StatusType
+    created_at: datetime
 
 
 # Appointment schemas
@@ -293,3 +290,8 @@ class ServiceWithDetails(Service):
 class AppointmentWithDetails(Appointment):
     service: Optional[Service] = None
     client: Optional[Client] = None
+    
+
+class ResponseMessage(BaseModel):
+    message: str
+    status: str = "success"

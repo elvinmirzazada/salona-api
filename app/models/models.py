@@ -1,9 +1,9 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy import Enum as SQLAlchemyEnum
 from app.db.base_class import BaseModel
-from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus
+from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus, CustomerStatusType, EmailStatusType, PhoneStatusType, VerificationType, VerificationStatus
 
 
 class Professional(BaseModel):
@@ -137,28 +137,66 @@ class Service(BaseModel):
     appointments = relationship("Appointment", back_populates="service")
 
 
-class Client(BaseModel):
-    __tablename__ = "clients"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    first_name = Column(String(50), nullable=False)
-    last_name = Column(String(50), nullable=False)
-    email = Column(String(255))
-    phone_number = Column(String(20), nullable=False)
-    birthdate = Column(Date)
-    gender = Column(SQLAlchemyEnum(GenderType))
-    preferred_language = Column(String(10), default="en")
-    source = Column(SQLAlchemyEnum(SourceType), default=SourceType.WALK_IN)
-    business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
-    
-    __table_args__ = (
-        UniqueConstraint('phone_number', 'business_id', name='_phone_business_uc'),
-    )
-    
-    # Relationships
-    business = relationship("Business", back_populates="clients")
-    appointments = relationship("Appointment", back_populates="client")
+class Customers(BaseModel):
+    __tablename__ = "customers"
 
+    id = Column(UUID, primary_key=True, index=True)
+    first_name = Column(String(100), nullable=False)
+    last_name = Column(String(100), nullable=False)
+    email = Column(String(255), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=False)
+    phone_number = Column(String(20), nullable=False)
+    status = Column(SQLAlchemyEnum(CustomerStatusType), default=CustomerStatusType.pending_verification)
+    email_verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class CustomerEmails(BaseModel):
+    __tablename__ = "customer_emails"
+
+    id = Column(UUID, primary_key=True, index=True)
+    customer_id = Column(UUID, ForeignKey("customers.id", ondelete="CASCADE"))
+    email = Column(String(255), nullable=False, unique=True)
+    status = Column(SQLAlchemyEnum(EmailStatusType), default=EmailStatusType.unverified)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class CustomerPhones(BaseModel):
+    __tablename__ = "customer_phones"
+
+    id = Column(UUID, primary_key=True, index=True)
+    customer_id = Column(UUID, ForeignKey("customers.id", ondelete="CASCADE"))
+    phone = Column(String(20), nullable=False)
+    is_primary = Column(Boolean, default=False)
+    status = Column(SQLAlchemyEnum(PhoneStatusType), default=PhoneStatusType.unverified)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class CustomerAddresses(BaseModel):
+    __tablename__ = "customer_addresses"
+
+    id = Column(UUID, primary_key=True, index=True)
+    customer_id = Column(UUID, ForeignKey("customers.id", ondelete="CASCADE"))
+    address_line1 = Column(String(255), nullable=False)
+    address_line2 = Column(String(255))
+    city = Column(String(100), nullable=False)
+    zip = Column(String(20))
+    country = Column(String(100), nullable=False)
+    is_primary = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class CustomerVerifications(BaseModel):
+    __tablename__ = "customer_verifications"
+
+    id = Column(UUID, primary_key=True, index=True)
+    customer_id = Column(UUID, ForeignKey("customers.id", ondelete="CASCADE"))
+    token = Column(String(255), nullable=False, unique=True)
+    type = Column(SQLAlchemyEnum(VerificationType), nullable=False)
+    status = Column(SQLAlchemyEnum(VerificationStatus), default=VerificationStatus.PENDING)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    used_at = Column(DateTime, nullable=True)
 
 class Appointment(BaseModel):
     __tablename__ = "appointments"

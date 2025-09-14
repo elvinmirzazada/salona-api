@@ -6,7 +6,7 @@ This document covers authentication for the **Customers** in Salona.
 
 All authentication endpoints are versioned under:
 
-/api/v1/auth/customers
+/api/v1/customers/auth
 
 ---
 
@@ -87,7 +87,7 @@ POST /api/v1/customers/auth/signup
 Confirms customer’s email after signup.
 
 ```
-POST /api/v1/auth/users/verify-email
+POST /api/v1/customers/auth/verify-email
 ```
 
 **Request Body**

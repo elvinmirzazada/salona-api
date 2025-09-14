@@ -57,9 +57,9 @@ def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[timedelta
     return encoded_jwt
 
 
-def create_token_pair(professional_id: int, mobile_number: str) -> Dict[str, str]:
-    """Create both access and refresh tokens for a professional."""
-    data = {"sub": str(professional_id), "mobile_number": mobile_number}
+def create_token_pair(id: int, email: str, actor: str, ver: str = '1') -> Dict[str, str]:
+    """Create both access and refresh tokens."""
+    data = {"sub": str(id), "email": email, "actor": actor, "ver": ver}
     access_token = create_access_token(data)
     refresh_token = create_refresh_token(data)
     
@@ -116,18 +116,20 @@ def refresh_access_token(refresh_token: str) -> Optional[Dict[str, str]]:
     if payload is None:
         return None
         
-    professional_id = payload.get("sub")
-    mobile_number = payload.get("mobile_number")
-    
-    if not professional_id or not mobile_number:
+    id = payload.get("sub")
+    email = payload.get("email")
+    actor = payload.get("actor")
+    ver = payload.get("ver")
+
+    if not id or not email:
         return None
         
     try:
-        professional_id = int(professional_id)
-        data = {"sub": str(professional_id), "mobile_number": mobile_number}
+        data = {"sub": id, "email": email, "actor": actor, "ver": ver}
         access_token = create_access_token(data)
         return {
             "access_token": access_token,
+            'refresh_token': refresh_token,
             "token_type": "bearer",
             "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60  # seconds
         }

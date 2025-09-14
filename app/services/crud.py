@@ -1,11 +1,13 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
-from app.models.models import Business, Service, Client, Appointment, Professional, BusinessStaff
+from app.models.models import (Business, Service, Customers, Appointment,
+                               Professional, BusinessStaff, CustomerVerifications, CustomerPhones, 
+                               CustomerEmails)
 from app.schemas.schemas import (
     BusinessCreate, BusinessUpdate,
     ServiceCreate, ServiceUpdate,
-    ClientCreate, ClientUpdate,
+    CustomerCreate, CustomerUpdate,
     AppointmentCreate, AppointmentUpdate,
     ProfessionalCreate, ProfessionalUpdate, 
     BusinessStaffCreate
@@ -112,29 +114,42 @@ class CRUDService:
         return db_obj
 
 
-class CRUDClient:
-    def get(self, db: Session, id: int) -> Optional[Client]:
-        return db.query(Client).filter(Client.id == id).first()
+class CRUDCustomer:
+    def get(self, db: Session, id: int) -> Optional[Customers]:
+        return db.query(Customers).filter(Customers.id == id).first()
     
-    def get_by_phone_and_business(self, db: Session, phone_number: str, business_id: int) -> Optional[Client]:
-        return db.query(Client).filter(
-            and_(Client.phone_number == phone_number, Client.business_id == business_id)
-        ).first()
-    
-    def get_multi_by_business(self, db: Session, business_id: int, skip: int = 0, limit: int = 100) -> List[Client]:
-        return db.query(Client).filter(Client.business_id == business_id).offset(skip).limit(limit).all()
-    
-    def create(self, db: Session, *, obj_in: ClientCreate) -> Client:
-        db_obj = Client(**obj_in.model_dump())
+    def get_by_email(self, db: Session, email: str) -> Optional[Customers]:
+        return db.query(Customers).filter(Customers.email == email).first()
+
+    def create(self, db: Session, *, obj_in: CustomerCreate) -> Customers:
+        db_obj = Customers(**obj_in.model_dump())
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
         return db_obj
-    
-    def update(self, db: Session, *, db_obj: Client, obj_in: ClientUpdate) -> Client:
+
+    def create_customer_email(self, db: Session, customer_id: int, email: str, status: str) -> CustomerEmails:
+        db_obj = CustomerEmails(customer_id=customer_id, email=email, status=status)
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+
+    def update(self, db: Session, *, db_obj: Customers, obj_in: CustomerUpdate) -> Customers:
         update_data = obj_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_obj, field, value)
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+
+    def get_verification_token(self, db: Session, token: str, type: str) -> Optional[CustomerVerifications]:
+        return db.query(CustomerVerifications).filter(CustomerVerifications.token == token,
+                                                      CustomerVerifications.type == type).first()
+
+    def verify_token(self, db: Session, db_obj: CustomerVerifications) -> CustomerVerifications:
+        db_obj.status = "verified"
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
@@ -172,6 +187,6 @@ class CRUDAppointment:
 professional = CRUDProfessional()
 business = CRUDBusiness()
 service = CRUDService()
-client = CRUDClient()
+customer = CRUDCustomer()
 appointment = CRUDAppointment()
 business_staff = CRUDBusinessStaff()

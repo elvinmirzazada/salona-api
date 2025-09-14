@@ -14,6 +14,19 @@ class StatusType(str, Enum):
     suspended = "suspended"
 
 
+class EmailStatusType(str, Enum):
+    primary = "primary"
+    secondary = "secondary"
+    unverified = "unverified"
+
+class PhoneStatusType(EmailStatusType):
+    pass
+
+class CustomerStatusType(str, Enum):
+    active = "active"
+    pending_verification = "pending_verification"
+    disabled = "disabled"
+
 class PriceType(str, Enum):
     FIXED = "fixed"
     FROM = "from"
@@ -34,3 +47,13 @@ class AppointmentStatus(str, Enum):
     CANCELLED = "cancelled"
     COMPLETED = "completed"
     NO_SHOW = "no_show"
+
+class VerificationType(str, Enum):
+    EMAIL = "email"
+    SMS = "sms"
+    TWO_FACTOR = "two_factor"
+
+class VerificationStatus(str, Enum):
+    PENDING = "pending"
+    EXPIRED = "expired"
+    VERIFIED = "verified"

@@ -3,8 +3,12 @@ from typing import Optional
 
 
 class LoginRequest(BaseModel):
-    identifier: str
+    email: str
     password: str
+
+
+class VerificationRequest(BaseModel):
+    token: str
 
 
 class TokenResponse(BaseModel):

@@ -112,6 +112,19 @@
 - `created_at`:	Datetime    Added timestamp
 
 
+### Customer Verification
+| Field        | Type     | Description                                  |
+| ------------ | -------- | -------------------------------------------- |
+| `id`         | UUID     | Primary key                                  |
+| `customer_id`| UUID     | FK → `customers.id`                          |
+| `token`      | String   | Unique verification token                    |
+| `type`       | Enum     | `email_verification`, `password_reset`, etc. |
+| `status`     | Enum     | `pending`, `used`, `expired`                 |
+| `expires_at` | DateTime | Token expiration timestamp                   |
+| `created_at` | DateTime | Timestamp of creation                        |
+| `used_at`    | DateTime | Timestamp of use (nullable)                  |
+
+
 ---
 
 ---
