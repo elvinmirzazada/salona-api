@@ -4,13 +4,13 @@
 
 This document covers authentication for the **two actor types** in Salona:
 - **Users**: staff who operate inside companies and manage availability, services, and bookings.
-- **Clients**: end customers who create reservations.
+- **Companies**: Companies.
 
 - Companies are created by workers and can have many workers. A worker can belong to multiple companies.
 
 All authentication endpoints are versioned under:
 
-/api/v1
+/api/v1/auth/
 
 ---
 

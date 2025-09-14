@@ -4,6 +4,11 @@
 
 The Salona Booking System API provides endpoints to manage salon services, appointments, and customer interactions.
 
+## Documentation
+
+- [General API Overview](./general.md)
+- [Authentication](./auth.md)
+- [Database Schemas](./schemas.md)
 
 **Base URL**:
 
