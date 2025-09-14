@@ -1,47 +1,44 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 import uuid
-from app.models.models import (Customers, CustomerVerifications, CustomerPhones,
+from app.models.models import (Customers, CustomerVerifications, CustomerPhones, Users,
                                CustomerEmails)
 from app.schemas.schemas import (
     BusinessCreate, BusinessUpdate,
     ServiceCreate, ServiceUpdate,
     CustomerCreate, CustomerUpdate,
     AppointmentCreate, AppointmentUpdate,
-    ProfessionalCreate, ProfessionalUpdate, 
+    UserCreate, UserUpdate, User,
     BusinessStaffCreate
 )
 
 
-# class CRUDProfessional:
-#     def get(self, db: Session, id: int) -> Optional[Professional]:
-#         return db.query(Professional).filter(Professional.id == id).first()
-#
-#     def get_by_mobile(self, db: Session, mobile_number: str) -> Optional[Professional]:
-#         return db.query(Professional).filter(Professional.mobile_number == mobile_number).first()
-#
-#     def create(self, db: Session, *, obj_in: ProfessionalCreate) -> Professional:
-#         db_obj = Professional(
-#             first_name=obj_in.first_name,
-#             last_name=obj_in.last_name,
-#             password=obj_in.password,  # Should be hashed before storing
-#             mobile_number=obj_in.mobile_number,
-#             country=obj_in.country,
-#             accept_privacy_policy=obj_in.accept_privacy_policy
-#         )
-#         db.add(db_obj)
-#         db.commit()
-#         db.refresh(db_obj)
-#         return db_obj
-#
-#     def update(self, db: Session, *, db_obj: Professional, obj_in: ProfessionalUpdate) -> Professional:
-#         update_data = obj_in.model_dump(exclude_unset=True)
-#         for field, value in update_data.items():
-#             setattr(db_obj, field, value)
-#         db.add(db_obj)
-#         db.commit()
-#         db.refresh(db_obj)
-#         return db_obj
+class CRUDUser:
+    @staticmethod
+    def get(db: Session, id: int) -> Optional[Users]:
+        return db.query(Users).filter(Users.id == id).first()
+
+    @staticmethod
+    def get_by_email(db: Session, email: str) -> Optional[Users]:
+        return db.query(Users).filter(Users.email == email).first()
+
+    @staticmethod
+    def create(db: Session, *, obj_in: UserCreate) -> Users:
+        db_obj = Users(**obj_in.model_dump())
+        db_obj.id = str(uuid.uuid4())
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+    #
+    # def update(self, db: Session, *, db_obj: Professional, obj_in: ProfessionalUpdate) -> Professional:
+    #     update_data = obj_in.model_dump(exclude_unset=True)
+    #     for field, value in update_data.items():
+    #         setattr(db_obj, field, value)
+    #     db.add(db_obj)
+    #     db.commit()
+    #     db.refresh(db_obj)
+    #     return db_obj
 #
 #
 # class CRUDBusiness:
@@ -184,7 +181,7 @@ class CRUDCustomer:
 
 
 # Create instances
-# professional = CRUDProfessional()
+user = CRUDUser
 # business = CRUDBusiness()
 # service = CRUDService()
 customer = CRUDCustomer()

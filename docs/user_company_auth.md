@@ -10,7 +10,7 @@ This document covers authentication for the **two actor types** in Salona:
 
 All authentication endpoints are versioned under:
 
-/api/v1/auth/
+/api/v1/users/auth
 
 ---
 
@@ -57,14 +57,14 @@ Users can join the Salona Booking System in two ways:
 
 ### 1. Self-Registration + Company Creation
 
-- A new user signs up through /auth/users/signup.
+- A new user signs up through /users/auth/signup.
 
 - After verifying email, the user creates a Company Profile (POST /companies).
 
 - This user automatically becomes the admin/owner of that company.
 
 #### - Signup
-POST /api/v1/auth/users/signup
+POST /api/v1/users/auth/signup
 
 **Body**
 ```json
@@ -93,7 +93,7 @@ Response Example
 
 #### - Email verification
 
-POST /api/v1/auth/users/verify-email
+POST /api/v1/users/auth/verify-email
 
 **Body**
 ```json
@@ -170,7 +170,7 @@ Response
 
 Accept invitation
 ```
-POST /api/v1/auth/users/accept-invite
+POST /api/v1/users/auth/accept-invite
 ```
 
 ```json
@@ -213,7 +213,7 @@ Response
 
 #### Login
 
-POST /api/v1/auth/users/signin
+POST /api/v1/users/auth/signin
 
 **Body**
 
@@ -273,7 +273,7 @@ Revokes refresh token family.
 ---
 
 #### Password reset (request + confirm)
-POST /api/v1/auth/users/password-reset/request
-POST /api/v1/auth/users/password-reset/confirm
+POST /api/v1/users/auth/password-reset/request
+POST /api/v1/users/auth/password-reset/confirm
 
 ---

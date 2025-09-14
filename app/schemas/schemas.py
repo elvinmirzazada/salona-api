@@ -1,6 +1,8 @@
 from datetime import datetime, date
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict
+
+from app.models import CustomerStatusType
 from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus
 
 
@@ -12,30 +14,30 @@ class TimestampedModel(BaseModel):
     updated_at: datetime
 
 
-# Professional schemas
-class ProfessionalBase(BaseModel):
+# Users schemas
+class UserBase(BaseModel):
     first_name: str
     last_name: str
-    mobile_number: str
-    country: str
-    accept_privacy_policy: bool
+    email: str
+    phone: str
 
 
-class ProfessionalCreate(ProfessionalBase):
+class UserCreate(UserBase):
     password: str
 
 
-class ProfessionalUpdate(BaseModel):
+class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     mobile_number: Optional[str] = None
     country: Optional[str] = None
 
 
-class Professional(ProfessionalBase, TimestampedModel):
+class User(UserBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
     
     id: int
+    status: CustomerStatusType
 
 
 # Business schemas
@@ -244,7 +246,7 @@ class Customer(CustomerBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
     
     id: int
-    status: StatusType
+    status: CustomerStatusType
     created_at: datetime
 
 
@@ -278,7 +280,7 @@ class Appointment(AppointmentBase, TimestampedModel):
 
 # Enhanced schemas with relationships
 class BusinessWithDetails(Business):
-    owner: Optional[Professional] = None
+    owner: Optional[User] = None
     categories: List[BusinessCategory] = []
 
 

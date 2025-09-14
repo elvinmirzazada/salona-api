@@ -6,19 +6,18 @@ from app.db.base_class import BaseModel
 from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus, CustomerStatusType, EmailStatusType, PhoneStatusType, VerificationType, VerificationStatus
 
 #
-# class Professional(BaseModel):
-#     __tablename__ = "professionals"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     first_name = Column(String(50), nullable=False)
-#     last_name = Column(String(50), nullable=False)
-#     password = Column(String(255), nullable=False)
-#     mobile_number = Column(String(20), nullable=False, unique=True)
-#     country = Column(String(50), nullable=False)
-#     accept_privacy_policy = Column(Boolean, nullable=False, default=False)
-#
-#     # Relationships
-#     businesses = relationship("Business", back_populates="owner")
+class Users(BaseModel):
+    __tablename__ = "users"
+
+    id = Column(UUID, primary_key=True, index=True)
+    first_name = Column(String(100), nullable=False)
+    last_name = Column(String(100), nullable=False)
+    email = Column(String(255), nullable=False, unique=True)
+    password = Column(String(255), nullable=False)
+    phone = Column(String(20), nullable=False)
+    status = Column(SQLAlchemyEnum(CustomerStatusType), default=CustomerStatusType.pending_verification)
+    email_verified = Column(Boolean, default=False)
+
 #
 #
 # class Business(BaseModel):

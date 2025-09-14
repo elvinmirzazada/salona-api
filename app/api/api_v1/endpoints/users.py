@@ -1,40 +1,45 @@
-# from typing import List
-# from fastapi import APIRouter, Depends, HTTPException, status, Response
-# from sqlalchemy.orm import Session
-# from app.db.session import get_db
-# from app.schemas.schemas import Professional, ProfessionalCreate, ProfessionalUpdate
-# from app.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest
-# from app.services.crud import professional as crud_professional
-# from app.services.auth import hash_password, verify_password, create_token_pair, refresh_access_token
-# from app.api.dependencies import get_current_active_professional
-#
-# router = APIRouter()
-#
-# @router.post("/register", response_model=Professional, status_code=status.HTTP_201_CREATED)
-# async def register_professional(
-#     *,
-#     db: Session = Depends(get_db),
-#     professional_in: ProfessionalCreate
-# ) -> Professional:
-#     """
-#     Register a new professional.
-#     """
-#     # Check if professional with this mobile number already exists
-#     existing_professional = crud_professional.get_by_mobile(db, mobile_number=professional_in.mobile_number)
-#     if existing_professional:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST,
-#             detail="Professional with this mobile number already exists"
-#         )
-#
-#     # Hash the password before storing
-#     professional_in.password = hash_password(professional_in.password)
-#
-#     professional = crud_professional.create(db=db, obj_in=professional_in)
-#
-#     return professional
-#
-#
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, Response
+from sqlalchemy.orm import Session
+from app.db.session import get_db
+from app.schemas.schemas import User, UserCreate, UserUpdate
+from app.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest
+from app.services.crud import user as crud_user
+from app.schemas.schemas import ResponseMessage
+from app.services.auth import hash_password, verify_password, create_token_pair, refresh_access_token
+from app.api.dependencies import get_current_active_professional
+
+router = APIRouter()
+
+@router.post("/auth/signup", response_model=ResponseMessage, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    *,
+    db: Session = Depends(get_db),
+    response: Response,
+    user_in: UserCreate
+) -> ResponseMessage:
+    """
+    Register a new user.
+    """
+
+    try:
+        existing_customer = crud_user.get_by_email(
+            db=db,
+            email=user_in.email
+        )
+        if existing_customer:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return ResponseMessage(message="User with this email already exists for this business", status="error")
+
+        user_in.password = hash_password(user_in.password)
+        crud_user.create(db=db, obj_in=user_in)
+        response.status_code = status.HTTP_201_CREATED
+        return ResponseMessage(message="User created successfully", status="success")
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+
+
 # @router.get("/me", response_model=Professional)
 # async def get_current_professional_info(
 #     current_professional: Professional = Depends(get_current_active_professional)
@@ -125,44 +130,42 @@
 #     return professional
 #
 #
-# @router.post("/login", response_model=TokenResponse)
-# async def login_professional(
-#     login_data: LoginRequest,
-#     response: Response,
-#     db: Session = Depends(get_db)
-# ) -> TokenResponse:
-#     """
-#     Login professional using mobile number or email and return JWT tokens.
-#     """
-#     # Try to get professional by mobile number first
-#     professional = crud_professional.get_by_mobile(db, mobile_number=login_data.identifier)
-#
-#     # If not found by mobile, try by email (if the model supports it)
-#     # For now, we'll just support mobile number until email field is added to the model
-#     if not professional:
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Invalid credentials"
-#         )
-#
-#     # Verify password
-#     if not verify_password(login_data.password, professional.password):
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Invalid credentials"
-#         )
-#
-#     # Create token pair
-#     tokens = create_token_pair(professional.id, professional.mobile_number)
-#     response.set_cookie(
-#         key="refresh_token",
-#         value=tokens["refresh_token"],
-#         httponly=True,
-#         secure=True,  # only over HTTPS
-#         samesite="strict"
-#     )
-#     return TokenResponse(**tokens)
-#
+@router.post("/auth/login", response_model=TokenResponse)
+async def user_login(
+    login_data: LoginRequest,
+    response: Response,
+    db: Session = Depends(get_db)
+) -> TokenResponse:
+    """
+    Login professional using mobile number or email and return JWT tokens.
+    """
+    # Try to get professional by mobile number first
+    user = crud_user.get_by_email(db, email=login_data.email)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+
+    # Verify password
+    if not verify_password(login_data.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+
+    # Create token pair
+    tokens = create_token_pair(user.id, user.email, actor="user", ver="1")
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        secure=True,  # only over HTTPS
+        samesite="strict"
+    )
+    return TokenResponse(**tokens)
+
 #
 # @router.post("/refresh-token", response_model=TokenResponse)
 # async def refresh_token(

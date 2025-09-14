@@ -1,8 +1,8 @@
 from fastapi import APIRouter
-from app.api.api_v1.endpoints import customers, professionals, businesses, services, appointments
+from app.api.api_v1.endpoints import customers, users
 
 api_router = APIRouter()
-# api_router.include_router(professionals.router, prefix="/professionals", tags=["professionals"])
+api_router.include_router(users.router, prefix="/users", tags=["users"])
 # api_router.include_router(businesses.router, prefix="/businesses", tags=["businesses"])
 # api_router.include_router(services.router, prefix="/services", tags=["services"])
 api_router.include_router(customers.router, prefix="/customers", tags=["customers"])

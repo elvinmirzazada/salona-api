@@ -3,16 +3,16 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.auth import get_current_professional_id
-from app.services.crud import professional as crud_professional
-from app.models.models import Professional
+from app.services.crud import user as crud_user
+from app.models.models import Users
 
 security = HTTPBearer()
 
 
-async def get_current_professional(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
-) -> Professional:
+) -> Users:
     """Get the current authenticated professional from JWT token."""
     
     credentials_exception = HTTPException(
@@ -31,7 +31,7 @@ async def get_current_professional(
         raise credentials_exception
     
     # Get professional from database
-    professional = crud_professional.get(db, id=professional_id)
+    professional = crud_user.get(db, id=professional_id)
     if professional is None:
         raise credentials_exception
         
@@ -39,8 +39,8 @@ async def get_current_professional(
 
 
 async def get_current_active_professional(
-    current_professional: Professional = Depends(get_current_professional)
-) -> Professional:
+    current_professional: Users = Depends(get_current_user)
+) -> Users:
     """Get the current active professional (can be extended for status checks)."""
     # Here you can add additional checks like account status, subscription, etc.
     return current_professional
