@@ -67,38 +67,46 @@ def get_customer(
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
 
-@router.post("/auth/login", response_model=ResponseMessage)
+@router.post("/auth/login", response_model=TokenResponse)
 async def customer_login(
     login_data: LoginRequest,
     response: Response,
     db: Session = Depends(get_db)
-) -> ResponseMessage:
+) -> TokenResponse:
     """
     Login customer using email and return JWT tokens.
     """
-    try:
-        customer = crud_customer.get_by_email(db, email=login_data.email)
-        if not customer:
-            response.status_code = status.HTTP_401_UNAUTHORIZED
-            return ResponseMessage(message="Invalid credentials", status="error")
-        if customer.status != "active":
-            response.status_code = status.HTTP_403_FORBIDDEN
-            return ResponseMessage(message="Customer account is not active", status="error")
-        if not verify_password(login_data.password, customer.password):
-            response.status_code = status.HTTP_401_UNAUTHORIZED
-            return ResponseMessage(message="Invalid credentials", status="error")
-        tokens = create_token_pair(customer.id, customer.email, actor="customer", ver="1")
-        response.set_cookie(
-            key="refresh_token",
-            value=tokens["refresh_token"],
-            httponly=True,
-            secure=True,  # only over HTTPS
-            samesite="strict"
+    customer = crud_customer.get_by_email(db, email=login_data.email)
+
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
         )
-        return ResponseMessage(message="Login successful", status="success")
-    except Exception as e:
-        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+
+    if customer.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customer account is not active"
+        )
+
+    # Verify password
+    if not verify_password(login_data.password, customer.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+
+    # Create token pair
+    tokens = create_token_pair(customer.id, customer.email, actor="customer", ver="1")
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        secure=True,  # only over HTTPS
+        samesite="strict"
+    )
+    return TokenResponse(**tokens)
 
 
 @router.post("/auth/refresh-token", response_model=ResponseMessage)
