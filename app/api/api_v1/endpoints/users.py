@@ -7,7 +7,7 @@ from app.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest
 from app.services.crud import user as crud_user
 from app.schemas.schemas import ResponseMessage
 from app.services.auth import hash_password, verify_password, create_token_pair, refresh_access_token
-from app.api.dependencies import get_current_active_professional
+
 
 router = APIRouter()
 
@@ -184,15 +184,14 @@ async def user_login(
 #     return TokenResponse(**tokens)
 #
 #
-# @router.post("/logout")
-# async def logout_professional(response: Response):
-#     """
-#     Logout professional by clearing the refresh token cookie
-#     """
-#     response.delete_cookie(
-#         key="refresh_token",
-#         httponly=True,
-#         secure=True,
-#         samesite="strict"
-#     )
-#     return {"message": "Successfully logged out"}
+@router.put("/auth/logout")
+async def logout_user(response: Response):
+    """
+    Logout professional by clearing the refresh token cookie
+    """
+    try:
+        response.delete_cookie(key="refresh_token")
+        return ResponseMessage(message="Logged out successfully", status="success")
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")

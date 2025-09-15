@@ -75,6 +75,18 @@
 
 ---
 
+### Company Users
+
+| Field        | Type      | Description |
+|--------------|----------|-------------|
+| `id`         | UUID     | Primary key |
+| `user_id`    | UUID     | FK → `users.id` |
+| `company_id` | UUID     | FK → `companies.id` |
+| `role`       | Enum     | Role of user in the company, e.g. `admin`, `manager`, `staff` |
+| `status`     | Enum     | Membership status: `active`, `pending`, `invited`, `suspended` |
+| `created_at` | DateTime | When the record was created |
+| `updated_at` | DateTime | When the record was last updated |
+
 ---
 
 ### Customers

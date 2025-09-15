@@ -19,10 +19,21 @@ class EmailStatusType(str, Enum):
     secondary = "secondary"
     unverified = "unverified"
 
+class CustomerEmailStatusType(str, Enum):
+    primary = "primary"
+    secondary = "secondary"
+    unverified = "unverified"
+
 class PhoneStatusType(str, Enum):
     primary = "primary"
     secondary = "secondary"
     unverified = "unverified"
+
+class CompanyRoleType(str, Enum):
+    owner = "owner"
+    admin = "admin"
+    staff = "staff"
+    viewer = "viewer"
 
 class CustomerStatusType(str, Enum):
     active = "active"

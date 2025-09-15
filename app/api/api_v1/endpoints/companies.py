@@ -1,37 +1,28 @@
-# from typing import List
-# from fastapi import APIRouter, Depends, HTTPException, status
-# from sqlalchemy.orm import Session
-# from app.api.dependencies import get_current_active_professional
-# from app.db.session import get_db
-# from app.models.models import Professional, Business
-# from app.schemas import BusinessCreate, Business as BusinessSchema, BusinessWithDetails, BusinessStaff, BusinessStaffCreate
-# from app.services import crud as crud_business
-#
-# router = APIRouter()
-#
-#
-# @router.post("/", response_model=BusinessSchema, status_code=status.HTTP_201_CREATED)
-# async def create_business(
-#     *,
-#     db: Session = Depends(get_db),
-#     business_in: BusinessCreate,
-#     current_professional: Professional = Depends(get_current_active_professional)
-# ) -> Business:
-#     """
-#     Create a new business.
-#     """
-#     # Set the owner_id from the authenticated professional
-#     business_in.owner_id = current_professional.id
-#     business = crud_business.business.create(db=db, obj_in=business_in)
-#     crud_business.business_staff.create(
-#         db=db,
-#         obj_in=BusinessStaffCreate(
-#             business_id=business.id,
-#             professional_id=current_professional.id
-#         )
-#     )
-#     return business
-#
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from app.api.dependencies import get_current_active_user
+from app.db.session import get_db
+from app.models.models import Users
+from app.schemas import CompanyCreate, User, Company
+from app.services.crud import company as crud_company
+
+router = APIRouter()
+
+
+@router.post("", response_model=Company, status_code=status.HTTP_201_CREATED)
+async def create_company(
+    *,
+    db: Session = Depends(get_db),
+    company_in: CompanyCreate,
+    current_user: User = Depends(get_current_active_user)
+) -> Company:
+    """
+    Create a new company.
+    """
+    company = crud_company.create(db=db, obj_in=company_in, current_user=current_user)
+    return company
+
 #
 # @router.post("/add-member", response_model=BusinessStaff, status_code=status.HTTP_201_CREATED)
 # async def add_business_member(

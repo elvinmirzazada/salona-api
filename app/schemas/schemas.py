@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, UUID4
 
 from app.models import CustomerStatusType
 from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus
@@ -36,187 +36,37 @@ class UserUpdate(BaseModel):
 class User(UserBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
     
-    id: int
+    id: str
     status: CustomerStatusType
 
 
-# Business schemas
-class BusinessBase(BaseModel):
-    business_name: str
-    business_type: str
-    email: EmailStr
-    phone: str
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    country: Optional[str] = None
+# class CompanyUser(BaseModel):
+#     id: str
+#     user_id: str
+#     company_id: str
+
+
+
+# Company schemas
+class CompanyBase(BaseModel):
+    name: str
+    type: str
     logo_url: Optional[str] = None
     website: Optional[str] = None
     description: Optional[str] = None
     team_size: Optional[int] = 0
-    status: StatusType = StatusType.active
+    status: StatusType = StatusType.inactive
 
 
-class BusinessCreate(BusinessBase):
-    owner_id: int = None
-
-
-class BusinessUpdate(BaseModel):
-    business_name: Optional[str] = None
-    business_type: Optional[str] = None
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    country: Optional[str] = None
-    logo_url: Optional[str] = None
-    website: Optional[str] = None
-    description: Optional[str] = None
-    team_size: Optional[int] = None
-    status: Optional[StatusType] = None
-
-
-class Business(BusinessBase, TimestampedModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-    owner_id: int
-
-
-# Staff schemas
-class BusinessStaffBase(BaseModel):
-    is_active: bool = False
-
-class BusinessStaffCreate(BusinessStaffBase):
-    business_id: int
-    professional_id: int = None
-
-class BusinessStaff(BusinessStaffBase, TimestampedModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-    business_id: int
-    professional_id: int
-
-
-# Category schemas
-class CategoryBase(BaseModel):
-    name: str
-    icon_name: Optional[str] = None
-
-
-class CategoryCreate(CategoryBase):
+class CompanyCreate(CompanyBase):
     pass
 
 
-class CategoryUpdate(BaseModel):
-    name: Optional[str] = None
-    icon_name: Optional[str] = None
+class Company(CompanyBase, TimestampedModel):
+    id: UUID4
 
+    model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
 
-class Category(CategoryBase):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-    created_at: datetime
-
-
-# Business Category schemas
-class BusinessCategoryBase(BaseModel):
-    business_id: int
-    category_id: int
-    is_primary: bool = False
-
-
-class BusinessCategoryCreate(BusinessCategoryBase):
-    pass
-
-
-class BusinessCategory(BusinessCategoryBase):
-    model_config = ConfigDict(from_attributes=True)
-    
-    created_at: datetime
-
-
-# Service Type schemas
-class ServiceTypeBase(BaseModel):
-    name: str
-    parent_type_id: Optional[int] = None
-    business_id: int
-
-
-class ServiceTypeCreate(ServiceTypeBase):
-    pass
-
-
-class ServiceTypeUpdate(BaseModel):
-    name: Optional[str] = None
-    parent_type_id: Optional[int] = None
-
-
-class ServiceType(ServiceTypeBase, TimestampedModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-
-
-# Service Category schemas
-class ServiceCategoryBase(BaseModel):
-    name: str
-    color: Optional[str] = None
-    description: Optional[str] = None
-    business_id: int
-
-
-class ServiceCategoryCreate(ServiceCategoryBase):
-    pass
-
-
-class ServiceCategoryUpdate(BaseModel):
-    name: Optional[str] = None
-    color: Optional[str] = None
-    description: Optional[str] = None
-
-
-class ServiceCategory(ServiceCategoryBase, TimestampedModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-
-
-# Service schemas
-class ServiceBase(BaseModel):
-    service_name: str
-    service_type_id: Optional[int] = None
-    service_category_id: Optional[int] = None
-    description: Optional[str] = None
-    price_type: PriceType = PriceType.FIXED
-    price_amount: int  # Store in cents/minimal currency unit
-    duration: int  # Duration in seconds
-    business_id: int
-
-
-class ServiceCreate(ServiceBase):
-    pass
-
-
-class ServiceUpdate(BaseModel):
-    service_name: Optional[str] = None
-    service_type_id: Optional[int] = None
-    service_category_id: Optional[int] = None
-    description: Optional[str] = None
-    price_type: Optional[PriceType] = None
-    price_amount: Optional[int] = None
-    duration: Optional[int] = None
-
-
-class Service(ServiceBase, TimestampedModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
 
 
 # Customer schemas
@@ -245,54 +95,54 @@ class CustomerUpdate(BaseModel):
 class Customer(CustomerBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
     
-    id: int
+    id: str
     status: CustomerStatusType
     created_at: datetime
 
+#
+# # Appointment schemas
+# class AppointmentBase(BaseModel):
+#     service_id: int
+#     business_id: int
+#     client_id: int
+#     start_time: datetime
+#     end_time: datetime
+#     status: str = "scheduled"
+#
+#
+# class AppointmentCreate(AppointmentBase):
+#     pass
+#
+#
+# class AppointmentUpdate(BaseModel):
+#     service_id: Optional[int] = None
+#     client_id: Optional[int] = None
+#     start_time: Optional[datetime] = None
+#     end_time: Optional[datetime] = None
+#     status: Optional[str] = None
+#
+#
+# class Appointment(AppointmentBase, TimestampedModel):
+#     model_config = ConfigDict(from_attributes=True)
+#
+#     id: int
+#
 
-# Appointment schemas
-class AppointmentBase(BaseModel):
-    service_id: int
-    business_id: int
-    client_id: int
-    start_time: datetime
-    end_time: datetime
-    status: str = "scheduled"
-
-
-class AppointmentCreate(AppointmentBase):
-    pass
-
-
-class AppointmentUpdate(BaseModel):
-    service_id: Optional[int] = None
-    client_id: Optional[int] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    status: Optional[str] = None
-
-
-class Appointment(AppointmentBase, TimestampedModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-
-
-# Enhanced schemas with relationships
-class BusinessWithDetails(Business):
-    owner: Optional[User] = None
-    categories: List[BusinessCategory] = []
-
-
-class ServiceWithDetails(Service):
-    service_type: Optional[ServiceType] = None
-    service_category: Optional[ServiceCategory] = None
-
-
-class AppointmentWithDetails(Appointment):
-    service: Optional[Service] = None
-    client: Optional[Customer] = None
-    
+# # Enhanced schemas with relationships
+# class BusinessWithDetails(Business):
+#     owner: Optional[User] = None
+#     categories: List[BusinessCategory] = []
+#
+#
+# class ServiceWithDetails(Service):
+#     service_type: Optional[ServiceType] = None
+#     service_category: Optional[ServiceCategory] = None
+#
+#
+# class AppointmentWithDetails(Appointment):
+#     service: Optional[Service] = None
+#     client: Optional[Customer] = None
+#
 
 class ResponseMessage(BaseModel):
     message: str

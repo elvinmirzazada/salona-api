@@ -94,18 +94,18 @@ def verify_token(token: str, token_type: str = "access") -> Optional[Dict[str, A
         return None
 
 
-def get_current_professional_id(token: str) -> Optional[int]:
-    """Extract professional ID from access token."""
+def get_current_user_id(token: str):
+    """Extract user ID from access token."""
     payload = verify_token(token, "access")
     if payload is None:
         return None
         
-    professional_id = payload.get("sub")
-    if professional_id is None:
+    user_id = payload.get("sub")
+    if user_id is None:
         return None
         
     try:
-        return int(professional_id)
+        return user_id
     except (ValueError, TypeError):
         return None
 

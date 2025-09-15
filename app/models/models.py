@@ -3,7 +3,10 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy import Enum as SQLAlchemyEnum
 from app.db.base_class import BaseModel
-from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus, CustomerStatusType, EmailStatusType, PhoneStatusType, VerificationType, VerificationStatus
+from app.models.enums import (GenderType, StatusType, PriceType, SourceType,
+                              AppointmentStatus, CustomerStatusType, EmailStatusType,
+                              PhoneStatusType, VerificationType, VerificationStatus,
+                              CompanyRoleType)
 
 #
 class Users(BaseModel):
@@ -20,25 +23,69 @@ class Users(BaseModel):
 
 #
 #
-# class Business(BaseModel):
-#     __tablename__ = "businesses"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     business_name = Column(String(100), nullable=False)
-#     business_type = Column(String(50), nullable=False)
-#     email = Column(String(255), unique=True, nullable=False)
-#     phone = Column(String(20), nullable=False)
-#     address = Column(Text)
-#     city = Column(String(100))
-#     state = Column(String(50))
-#     postal_code = Column(String(20))
-#     country = Column(String(50))
-#     owner_id = Column(Integer, ForeignKey("professionals.id"))
-#     logo_url = Column(String(255))
-#     website = Column(String(255))
-#     description = Column(Text)
-#     team_size = Column(Integer, default=0)
-#     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
+class Companies(BaseModel):
+    __tablename__ = "companies"
+
+    id = Column(UUID, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    type = Column(String(255), nullable=False)
+    logo_url = Column(String(255))
+    website = Column(String(255))
+    description = Column(Text)
+    team_size = Column(Integer, default=1)
+    status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class CompanyEmails(BaseModel):
+    __tablename__ = "company_emails"
+
+    id = Column(UUID, primary_key=True, index=True)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    email = Column(String(255), nullable=False, unique=True)
+    status = Column(SQLAlchemyEnum(EmailStatusType), default=EmailStatusType.unverified)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class CompanyPhones(BaseModel):
+    __tablename__ = "company_phones"
+
+    id = Column(UUID, primary_key=True, index=True)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    phone = Column(String(20), nullable=False)
+    is_primary = Column(Boolean, default=False)
+    status = Column(SQLAlchemyEnum(PhoneStatusType), default=PhoneStatusType.unverified)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class CompanyAddresses(BaseModel):
+    __tablename__ = "company_addresses"
+
+    id = Column(UUID, primary_key=True, index=True)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    address = Column(String(255), nullable=False)
+    city = Column(String(100), nullable=False)
+    zip = Column(String(20))
+    country = Column(String(100), nullable=False)
+    is_primary = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class CompanyUsers(BaseModel):
+    __tablename__ = "company_users"
+
+    id = Column(UUID, primary_key=True, index=True)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    role = Column(SQLAlchemyEnum(CompanyRoleType), default=CompanyRoleType.viewer)  # e.g., admin, member
+    status = Column(SQLAlchemyEnum(StatusType), default=StatusType.inactive)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (UniqueConstraint('user_id', 'company_id', name='_user_company_uc'),)
+
 #
 #     # Relationships
 #     owner = relationship("Professional", back_populates="businesses")
