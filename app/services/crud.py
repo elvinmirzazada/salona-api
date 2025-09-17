@@ -1,20 +1,25 @@
-from typing import List, Optional
+from datetime import timedelta
+from typing import List, Optional, Any
+
+from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 import uuid
 
-from app.models import CompanyRoleType, StatusType
+from app.models import CompanyRoleType, StatusType, BookingServices
 from app.models.models import (Customers, CustomerVerifications, CompanyUsers, Users,
-                               CustomerEmails, Companies)
+                               CustomerEmails, Companies, CompanyServices, Bookings)
+from app.schemas import BookingServiceRequest
 from app.schemas.schemas import (
     CompanyCreate,
     CustomerCreate, CustomerUpdate,
     UserCreate, UserUpdate, User,
+    BookingCreate
 )
 
 
 class CRUDUser:
     @staticmethod
-    def get(db: Session, id: str) -> Optional[Users]:
+    def get(db: Session, id: UUID4) -> Optional[Users]:
         return db.query(Users).filter(Users.id == id).first()
 
     @staticmethod
@@ -42,7 +47,7 @@ class CRUDUser:
 #
 class CRUDCompany:
     @staticmethod
-    def get(db: Session, id: int) -> Optional[Companies]:
+    def get(db: Session, id: UUID4) -> Optional[Companies]:
         return db.query(Companies).filter(Companies.id == id).first()
 
     @staticmethod
@@ -100,9 +105,10 @@ class CRUDCompany:
 #         return db_obj
 #
 #
-# class CRUDService:
-#     def get(self, db: Session, id: int) -> Optional[Service]:
-#         return db.query(Service).filter(Service.id == id).first()
+class CRUDService:
+    @staticmethod
+    def get_company_service(db: Session, id: UUID4) -> Optional[CompanyServices]:
+        return db.query(CompanyServices).filter(CompanyServices.id == id).first()
 #
 #     def get_multi_by_business(self, db: Session, business_id: int, skip: int = 0, limit: int = 100) -> List[Service]:
 #         return db.query(Service).filter(Service.business_id == business_id).offset(skip).limit(limit).all()
@@ -125,7 +131,8 @@ class CRUDCompany:
 
 
 class CRUDCustomer:
-    def get(self, db: Session, id: int) -> Optional[Customers]:
+    @staticmethod
+    def get(db: Session, id: UUID4) -> Optional[Customers]:
         return db.query(Customers).filter(Customers.id == id).first()
     
     def get_by_email(self, db: Session, email: str) -> Optional[Customers]:
@@ -167,9 +174,14 @@ class CRUDCustomer:
         return db_obj
 
 
-# class CRUDAppointment:
-#     def get(self, db: Session, id: int) -> Optional[Appointment]:
-#         return db.query(Appointment).filter(Appointment.id == id).first()
+class CRUDBooking:
+    @staticmethod
+    def get(db: Session, id: UUID4) -> Optional[Bookings]:
+        return db.query(Bookings).filter(Bookings.id == id).first()
+
+    @staticmethod
+    def get_all(db: Session, skip: int = 0, limit: int = 100) -> list[type[Bookings]]:
+        return list(db.query(Bookings).offset(skip).limit(limit).all())
 #
 #     def get_multi_by_business(self, db: Session, business_id: int, skip: int = 0, limit: int = 100) -> List[Appointment]:
 #         return db.query(Appointment).filter(Appointment.business_id == business_id).offset(skip).limit(limit).all()
@@ -177,12 +189,50 @@ class CRUDCustomer:
 #     def get_multi_by_client(self, db: Session, client_id: int, skip: int = 0, limit: int = 100) -> List[Appointment]:
 #         return db.query(Appointment).filter(Appointment.client_id == client_id).offset(skip).limit(limit).all()
 #
-#     def create(self, db: Session, *, obj_in: AppointmentCreate) -> Appointment:
-#         db_obj = Appointment(**obj_in.model_dump())
-#         db.add(db_obj)
-#         db.commit()
-#         db.refresh(db_obj)
-#         return db_obj
+    @staticmethod
+    def calc_service_params(db, services: List[BookingServiceRequest]):
+        total_duration = 0
+        total_price = 0
+
+        for srv in services:
+            selected_srv = CRUDService.get_company_service(db, srv.company_service_id)
+            total_duration += selected_srv.custom_duration
+            total_price += int(selected_srv.custom_price)
+
+        return total_duration, total_price
+
+
+
+    def create(self, db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
+        total_duration, total_price = self.calc_service_params(db, obj_in.services)
+        db_obj = Bookings(
+            customer_id=customer_id,
+            company_id=obj_in.company_id,
+            start_at=obj_in.start_time,
+            end_at= obj_in.start_time + timedelta(minutes=total_duration),
+            total_price=total_price,
+            notes=obj_in.notes
+        )
+        db.add(db_obj)
+        db.commit()
+
+        start_time = obj_in.start_time
+        for srv in obj_in.services:
+            duration, _ = self.calc_service_params(db, obj_in.services)
+            db_service_obj = BookingServices(
+                booking_id=db_obj.id,
+                company_service_id=srv.company_service_id,
+                user_id=srv.user_id,
+                notes=srv.notes,
+                start_at=start_time,
+                end_at=start_time + timedelta(minutes=duration)
+            )
+            start_time = db_service_obj.end_at
+            db.add(db_service_obj)
+
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
 #
 #     def update(self, db: Session, *, db_obj: Appointment, obj_in: AppointmentUpdate) -> Appointment:
 #         update_data = obj_in.model_dump(exclude_unset=True)
@@ -197,7 +247,8 @@ class CRUDCustomer:
 # Create instances
 user = CRUDUser
 company = CRUDCompany()
-# service = CRUDService()
+service = CRUDService()
 customer = CRUDCustomer()
+booking = CRUDBooking()
 # appointment = CRUDAppointment()
 # business_staff = CRUDBusinessStaff()

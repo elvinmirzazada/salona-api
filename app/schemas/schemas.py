@@ -3,7 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict, UUID4
 
 from app.models import CustomerStatusType
-from app.models.enums import GenderType, StatusType, PriceType, SourceType, AppointmentStatus
+from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus
 
 
 # Base schemas
@@ -99,33 +99,42 @@ class Customer(CustomerBase, TimestampedModel):
     status: CustomerStatusType
     created_at: datetime
 
-#
-# # Appointment schemas
-# class AppointmentBase(BaseModel):
-#     service_id: int
-#     business_id: int
-#     client_id: int
-#     start_time: datetime
-#     end_time: datetime
-#     status: str = "scheduled"
-#
-#
-# class AppointmentCreate(AppointmentBase):
-#     pass
-#
-#
-# class AppointmentUpdate(BaseModel):
-#     service_id: Optional[int] = None
-#     client_id: Optional[int] = None
-#     start_time: Optional[datetime] = None
-#     end_time: Optional[datetime] = None
-#     status: Optional[str] = None
-#
-#
-# class Appointment(AppointmentBase, TimestampedModel):
-#     model_config = ConfigDict(from_attributes=True)
-#
-#     id: int
+
+# Booking schemas
+class BookingBase(BaseModel):
+    customer_id: UUID4
+    company_id: UUID4
+    start_at: datetime
+    end_at: datetime
+    status: BookingStatus = BookingStatus.SCHEDULED
+    notes: Optional[str] = None
+
+class BookingServiceRequest(BaseModel):
+    company_service_id: UUID4
+    user_id: UUID4
+    notes: Optional[str] = None
+
+class BookingCreate(BaseModel):
+    company_id: UUID4
+    start_time: datetime
+    services: List[BookingServiceRequest]
+    notes: Optional[str] = None
+
+
+class BookingUpdate(BaseModel):
+    service_id: Optional[int] = None
+    client_id: Optional[int] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    status: Optional[str] = None
+
+
+class Booking(BookingBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    total_price: int
+
 #
 
 # # Enhanced schemas with relationships
@@ -139,7 +148,7 @@ class Customer(CustomerBase, TimestampedModel):
 #     service_category: Optional[ServiceCategory] = None
 #
 #
-# class AppointmentWithDetails(Appointment):
+# class BookingWithDetails(Booking):
 #     service: Optional[Service] = None
 #     client: Optional[Customer] = None
 #

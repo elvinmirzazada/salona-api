@@ -94,7 +94,7 @@ def verify_token(token: str, token_type: str = "access") -> Optional[Dict[str, A
         return None
 
 
-def get_current_user_id(token: str):
+def get_current_id(token: str):
     """Extract user ID from access token."""
     payload = verify_token(token, "access")
     if payload is None:

@@ -54,7 +54,7 @@ class SourceType(str, Enum):
     OTHER = "other"
 
 
-class AppointmentStatus(str, Enum):
+class BookingStatus(str, Enum):
     SCHEDULED = "scheduled"
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"

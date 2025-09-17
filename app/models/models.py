@@ -1,10 +1,12 @@
+import uuid
+
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy import Enum as SQLAlchemyEnum
 from app.db.base_class import BaseModel
 from app.models.enums import (GenderType, StatusType, PriceType, SourceType,
-                              AppointmentStatus, CustomerStatusType, EmailStatusType,
+                              BookingStatus, CustomerStatusType, EmailStatusType,
                               PhoneStatusType, VerificationType, VerificationStatus,
                               CompanyRoleType)
 
@@ -21,8 +23,32 @@ class Users(BaseModel):
     status = Column(SQLAlchemyEnum(CustomerStatusType), default=CustomerStatusType.pending_verification)
     email_verified = Column(Boolean, default=False)
 
-#
-#
+
+class UserAvailabilities(BaseModel):
+    __tablename__ = "user_availabilities"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
+    day_of_week = Column(Integer, nullable=False)  # 0=Monday, 6=Sunday
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    is_available = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class UserTimeOffs(BaseModel):
+    __tablename__ = "user_time_offs"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    reason = Column(Text)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class Companies(BaseModel):
     __tablename__ = "companies"
 
@@ -163,24 +189,6 @@ class CompanyUsers(BaseModel):
 #     services = relationship("Service", back_populates="service_category")
 #
 #
-# class Service(BaseModel):
-#     __tablename__ = "services"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     service_name = Column(String(100), nullable=False)
-#     service_type_id = Column(Integer, ForeignKey("service_types.id", ondelete="SET NULL"))
-#     service_category_id = Column(Integer, ForeignKey("service_categories.id", ondelete="SET NULL"))
-#     description = Column(Text)
-#     price_type = Column(SQLAlchemyEnum(PriceType), default=PriceType.FIXED)
-#     price_amount = Column(Integer, nullable=False)  # Store in cents/minimal currency unit
-#     duration = Column(Integer, nullable=False)  # Duration in seconds
-#     business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
-#
-#     # Relationships
-#     service_type = relationship("ServiceType", back_populates="services")
-#     service_category = relationship("ServiceCategory", back_populates="services")
-#     business = relationship("Business", back_populates="services")
-#     appointments = relationship("Appointment", back_populates="service")
 
 
 class Customers(BaseModel):
@@ -244,18 +252,56 @@ class CustomerVerifications(BaseModel):
     created_at = Column(DateTime, default=func.now())
     used_at = Column(DateTime, nullable=True)
 
-# class Appointment(BaseModel):
-#     __tablename__ = "appointments"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     service_id = Column(Integer, ForeignKey("services.id", ondelete="RESTRICT"))
-#     business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
-#     client_id = Column(Integer, ForeignKey("clients.id", ondelete="RESTRICT"))
-#     start_time = Column(DateTime, nullable=False)
-#     end_time = Column(DateTime, nullable=False)
-#     status = Column(String(20), default="scheduled")
-#
-#     # Relationships
-#     service = relationship("Service", back_populates="appointments")
-#     business = relationship("Business", back_populates="appointments")
-#     client = relationship("Client", back_populates="appointments")
+class Bookings(BaseModel):
+    __tablename__ = "bookings"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
+    customer_id = Column(UUID, ForeignKey("customers.id", ondelete="CASCADE"), nullable=True)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    status = Column(SQLAlchemyEnum(BookingStatus), default=BookingStatus.SCHEDULED)
+    start_at = Column(DateTime, nullable=False)
+    end_at = Column(DateTime, nullable=False)
+    total_price = Column(Integer, nullable=False)
+    notes = Column(Text)
+
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class GeneralServices(BaseModel):
+    __tablename__ = "general_services"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
+    name = Column(String(255), nullable=False)
+    default_duration = Column(Integer, nullable=False)
+    default_price = Column(Integer, nullable=False)
+    description = Column(Text)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class CompanyServices(BaseModel):
+    __tablename__ = "company_services"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    general_service_id = Column(UUID, ForeignKey("general_services.id", ondelete="CASCADE"))
+    custom_name = Column(String(255))
+    custom_duration = Column(Integer)
+    custom_price = Column(Integer)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class BookingServices(BaseModel):
+    __tablename__ = "booking_services"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
+    booking_id = Column(UUID, ForeignKey("bookings.id", ondelete="CASCADE"))
+    company_service_id = Column(UUID, ForeignKey("company_services.id", ondelete="CASCADE"))
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"))
+    notes = Column(Text)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    start_at = Column(DateTime, nullable=True)
+    end_at = Column(DateTime, nullable=True)
