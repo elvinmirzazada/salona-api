@@ -111,7 +111,7 @@ class CompanyAddresses(BaseModel):
 class CompanyUsers(BaseModel):
     __tablename__ = "company_users"
 
-    id = Column(UUID, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     role = Column(SQLAlchemyEnum(CompanyRoleType), default=CompanyRoleType.viewer)  # e.g., admin, member
@@ -203,7 +203,7 @@ class CompanyUsers(BaseModel):
 class Customers(BaseModel):
     __tablename__ = "customers"
 
-    id = Column(UUID, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     email = Column(String(255), nullable=False, unique=True)

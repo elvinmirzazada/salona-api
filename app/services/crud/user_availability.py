@@ -21,13 +21,12 @@ def get_user_time_offs(
     user_id: str,
     start_date: date,
     end_date: date
-) -> List[UserTimeOffs]:
+) -> List["UserTimeOffs"]:
     """Get all time-offs for a user within a date range"""
-    return list(db.query(UserTimeOffs).filter(
+    return db.query(UserTimeOffs).filter(
         UserTimeOffs.user_id == user_id,
         UserTimeOffs.start_date <= end_date,
-        UserTimeOffs.end_date >= start_date
-    ).all())
+        UserTimeOffs.end_date >= start_date).all()
 
 def get_all_availabilities(db: Session):
     """Get all available user availabilities"""

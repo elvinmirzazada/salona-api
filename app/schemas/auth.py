@@ -5,6 +5,7 @@ from typing import Optional
 class LoginRequest(BaseModel):
     email: str
     password: str
+    company_id: Optional[str] = None  # UUID as string, optional during login
 
 
 class VerificationRequest(BaseModel):
@@ -22,5 +23,6 @@ class RefreshTokenRequest(BaseModel):
 
 
 class TokenData(BaseModel):
-    professional_id: Optional[int] = None
-    identifier: Optional[str] = None
+    user_id: Optional[str] = None
+    email: Optional[str] = None
+    company_id: Optional[str] = None

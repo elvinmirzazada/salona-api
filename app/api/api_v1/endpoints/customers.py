@@ -135,7 +135,8 @@ async def customer_login(
                 status_code=status.HTTP_401_UNAUTHORIZED
             )
 
-        tokens = create_token_pair(customer.id, customer.email, actor="customer", ver="1")
+        tokens = create_token_pair(customer.id, customer.email, actor="customer", ver="1",
+                                   company_id=login_data.company_id)
         response.set_cookie(
             key="refresh_token",
             value=tokens["refresh_token"],
@@ -160,8 +161,7 @@ async def customer_login(
 @router.post("/auth/refresh-token", response_model=DataResponse[TokenResponse])
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
-    response: Response,
-    db: Session = Depends(get_db)
+    response: Response
 ) -> DataResponse:
     """
     Refresh access token using refresh token.
@@ -186,10 +186,17 @@ async def refresh_token(
             message="Login successful",
             data=TokenResponse(**tokens),
         )
+    except ValueError as ve:
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return DataResponse.error_response(
+            message=str(ve),
+            data=None,
+            status_code=status.HTTP_401_UNAUTHORIZED
+        )
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
-            message="Login failed",
+            message=f"Login failed: {str(e)}",
             data=None,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

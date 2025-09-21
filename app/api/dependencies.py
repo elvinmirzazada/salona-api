@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models import Customers
-from app.services.auth import get_current_id
+from app.services.auth import get_current_id, verify_token
 from app.services.crud import user as crud_user, customer as crud_customer
 from app.models.models import Users, Customers
 
@@ -70,6 +70,29 @@ async def get_current_customer(
     return customer
 
 
+def get_token_payload(
+        credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> dict:
+    """Extract and return the payload from the JWT token."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        # Extract user ID from token
+        payload = verify_token(credentials.credentials)
+        if payload is None:
+            raise credentials_exception
+
+    except Exception:
+        raise credentials_exception
+
+    return payload
+
+
+
 async def get_current_active_user(
     current_user: Users = Depends(get_current_user)
 ) -> Users:
@@ -85,3 +108,9 @@ async def get_current_active_customer(
     # Here you can add additional checks like account status, subscription, etc.
     return current_customer
 
+
+def get_current_company_id(token_payload: dict = Depends(get_token_payload)) -> str:
+    company_id = token_payload.get("company_id")
+    if not company_id:
+        raise HTTPException(status_code=403, detail="Company context required")
+    return company_id
