@@ -1,14 +1,16 @@
 import uuid
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID,
+                        Time,
+                        CheckConstraint)
 from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy.sql import func
+
 from app.db.base_class import BaseModel
-from app.models.enums import (GenderType, StatusType, PriceType, SourceType,
-                              BookingStatus, CustomerStatusType, EmailStatusType,
+from app.models.enums import (StatusType, BookingStatus, CustomerStatusType, EmailStatusType,
                               PhoneStatusType, VerificationType, VerificationStatus,
                               CompanyRoleType)
+
 
 #
 class Users(BaseModel):
@@ -30,11 +32,18 @@ class UserAvailabilities(BaseModel):
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
     user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
     day_of_week = Column(Integer, nullable=False)  # 0=Monday, 6=Sunday
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    start_time = Column(Time, nullable=False)  # Store only time (HH:MM)
+    end_time = Column(Time, nullable=False)    # Store only time (HH:MM)
     is_available = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        # Add constraint to ensure start_time is before end_time
+        CheckConstraint('start_time < end_time', name='check_time_order'),
+        # Add unique constraint to prevent overlapping time slots for the same user and day
+        UniqueConstraint('user_id', 'day_of_week', 'start_time', 'end_time', name='unique_user_availability')
+    )
 
 
 class UserTimeOffs(BaseModel):

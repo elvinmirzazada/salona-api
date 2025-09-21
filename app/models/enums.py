@@ -70,3 +70,8 @@ class VerificationStatus(str, Enum):
     PENDING = "pending"
     EXPIRED = "expired"
     VERIFIED = "verified"
+
+class AvailabilityType(str, Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"

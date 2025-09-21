@@ -1,12 +1,17 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
+from pydantic import UUID4
 from sqlalchemy.orm import Session
+from datetime import datetime, date, timedelta
 from app.db.session import get_db
-from app.schemas.schemas import User, UserCreate, UserUpdate
-from app.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest
-from app.services.crud import user as crud_user
+from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.responses import DataResponse
 from app.schemas.schemas import ResponseMessage
-from app.services.auth import hash_password, verify_password, create_token_pair, refresh_access_token
+from app.schemas.schemas import UserCreate,AvailabilityResponse
+from app.services.auth import hash_password, verify_password, create_token_pair
+from app.services.crud import user as crud_user
+from app.services.crud import booking as crud_booking
+from app.models.enums import AvailabilityType
+from app.services.crud import user_availability as crud_availability
 
 
 router = APIRouter()
@@ -195,3 +200,80 @@ async def logout_user(response: Response):
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+
+
+@router.get("/{user_id}/availability", response_model=DataResponse[AvailabilityResponse])
+async def get_user_availability(
+        *,
+        user_id: str,
+        availability_type: AvailabilityType = Query(..., description="Type of availability check: daily, weekly, or monthly"),
+        date_from: date = Query(..., description="Start date for availability check"),
+        response: Response,
+        db: Session = Depends(get_db)
+) -> DataResponse[AvailabilityResponse]:
+    """
+    Get user availability for a specific time range.
+    - daily: Shows available time slots for a specific date
+    - weekly: Shows available time slots for a week starting from date_from
+    - monthly: Shows available time slots for the month containing date_from
+    """
+    try:
+        # Get user's regular availability
+        availabilities = crud_availability.get_user_availabilities(db, user_id=user_id)
+        if not availabilities:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="No availability schedule found for this user",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get user's time-offs
+        time_offs = crud_availability.get_user_time_offs(
+            db,
+            user_id=user_id,
+            start_date=date_from,
+            end_date=date_from + timedelta(
+                days=1 if availability_type == AvailabilityType.DAILY else
+                     7 if availability_type == AvailabilityType.WEEKLY else 31
+            )
+        )
+
+        # Get existing bookings
+        bookings = crud_booking.get_user_bookings_in_range(
+            db,
+            user_id=user_id,
+            start_date=date_from,
+            end_date=date_from + timedelta(
+                days=1 if availability_type == AvailabilityType.DAILY else
+                     7 if availability_type == AvailabilityType.WEEKLY else 31
+            )
+        )
+
+        if availabilities:
+            # Calculate availability based on working hours, time-offs, and existing bookings
+            availability = crud_availability.calculate_availability(
+                availabilities=availabilities,
+                time_offs=time_offs,
+                bookings=bookings,
+                availability_type=availability_type,
+                date_from=date_from
+            )
+
+            return DataResponse.success_response(
+                data=availability,
+                message="Availability retrieved successfully",
+                status_code=status.HTTP_200_OK
+            )
+        else:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="No availability schedule found for this user",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to retrieve availability: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

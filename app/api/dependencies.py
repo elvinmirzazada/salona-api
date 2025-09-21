@@ -5,7 +5,7 @@ from app.db.session import get_db
 from app.models import Customers
 from app.services.auth import get_current_id
 from app.services.crud import user as crud_user, customer as crud_customer
-from app.models.models import Users
+from app.models.models import Users, Customers
 
 security = HTTPBearer()
 
@@ -42,9 +42,9 @@ async def get_current_user(
 async def get_current_customer(
         credentials: HTTPAuthorizationCredentials = Depends(security),
         db: Session = Depends(get_db)
-) -> Users:
+) -> Customers:
     """Get the current authenticated customer from JWT token."""
-
+    print(credentials)
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -54,6 +54,7 @@ async def get_current_customer(
     try:
         # Extract user ID from token
         customer_id = get_current_id(credentials.credentials)
+        print(customer_id)
         if customer_id is None:
             raise credentials_exception
 
@@ -62,6 +63,7 @@ async def get_current_customer(
 
     # Get user from database
     customer = crud_customer.get(db, id=customer_id)
+    print(customer)
     if customer is None:
         raise credentials_exception
 

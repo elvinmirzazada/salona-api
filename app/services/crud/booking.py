@@ -1,0 +1,78 @@
+from datetime import timedelta
+from typing import List, Optional, Any
+
+from pydantic.v1 import UUID4
+from sqlalchemy.orm import Session
+
+from app.models import BookingServices
+from app.models.models import Bookings
+from app.schemas import BookingServiceRequest
+from app.schemas.schemas import BookingCreate
+from app.services.crud import service
+
+
+def get(db: Session, id: UUID4) -> Optional[Bookings]:
+    return db.query(Bookings).filter(Bookings.id == id).first()
+
+
+def get_all(db: Session, skip: int = 0, limit: int = 100) -> list[type[Bookings]]:
+    return list(db.query(Bookings).offset(skip).limit(limit).all())
+
+def get_user_bookings_in_range(db: Session, user_id: str, start_date: Any, end_date: Any) -> list["Bookings"]:
+    return list(db.query(Bookings).join(BookingServices).filter(
+        BookingServices.user_id == user_id,
+        Bookings.start_at >= start_date,
+        Bookings.end_at <= end_date
+    ).all())
+#
+#     def get_multi_by_business(self, db: Session, business_id: int, skip: int = 0, limit: int = 100) -> List[Appointment]:
+#         return db.query(Appointment).filter(Appointment.business_id == business_id).offset(skip).limit(limit).all()
+#
+#     def get_multi_by_client(self, db: Session, client_id: int, skip: int = 0, limit: int = 100) -> List[Appointment]:
+#         return db.query(Appointment).filter(Appointment.client_id == client_id).offset(skip).limit(limit).all()
+#
+
+
+def calc_service_params(db, services: List[BookingServiceRequest]):
+    total_duration = 0
+    total_price = 0
+
+    for srv in services:
+        selected_srv = service.get_company_service(db, srv.company_service_id)
+        total_duration += selected_srv.custom_duration
+        total_price += int(selected_srv.custom_price)
+
+    return total_duration, total_price
+
+
+
+def create(self, db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
+    total_duration, total_price = self.calc_service_params(db, obj_in.services)
+    db_obj = Bookings(
+        customer_id=customer_id,
+        company_id=obj_in.company_id,
+        start_at=obj_in.start_time,
+        end_at= obj_in.start_time + timedelta(minutes=total_duration),
+        total_price=total_price,
+        notes=obj_in.notes
+    )
+    db.add(db_obj)
+    db.commit()
+
+    start_time = obj_in.start_time
+    for srv in obj_in.services:
+        duration, _ = self.calc_service_params(db, obj_in.services)
+        db_service_obj = BookingServices(
+            booking_id=db_obj.id,
+            company_service_id=srv.company_service_id,
+            user_id=srv.user_id,
+            notes=srv.notes,
+            start_at=start_time,
+            end_at=start_time + timedelta(minutes=duration)
+        )
+        start_time = db_service_obj.end_at
+        db.add(db_service_obj)
+
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj

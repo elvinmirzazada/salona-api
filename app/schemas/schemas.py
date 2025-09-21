@@ -1,9 +1,9 @@
-from datetime import datetime, date
+from datetime import datetime, date, time
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict, UUID4
 
 from app.models import CustomerStatusType
-from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus
+from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType
 
 
 # Base schemas
@@ -156,3 +156,30 @@ class Booking(BookingBase, TimestampedModel):
 class ResponseMessage(BaseModel):
     message: str
     status: str = "success"
+
+
+class TimeSlot(BaseModel):
+    start_time: time
+    end_time: time
+    is_available: bool
+
+class DailyAvailability(BaseModel):
+    date: date
+    time_slots: List[TimeSlot]
+
+class WeeklyAvailability(BaseModel):
+    week_start_date: date
+    week_end_date: date
+    daily_slots: List[DailyAvailability]
+
+class MonthlyAvailability(BaseModel):
+    month: int
+    year: int
+    weekly_slots: List[WeeklyAvailability]
+
+class AvailabilityResponse(BaseModel):
+    user_id: str
+    availability_type: AvailabilityType
+    daily: Optional[DailyAvailability] = None
+    weekly: Optional[WeeklyAvailability] = None
+    monthly: Optional[MonthlyAvailability] = None

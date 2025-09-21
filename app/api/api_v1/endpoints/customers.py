@@ -6,123 +6,136 @@ from app.db.session import get_db
 from app.schemas.schemas import Customer, CustomerCreate
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest, VerificationRequest
 from app.services.crud import customer as crud_customer
-from app.schemas.schemas import ResponseMessage
+from app.schemas.responses import DataResponse, ErrorResponse
 from app.services.auth import hash_password, verify_password, create_token_pair, refresh_access_token
 
 
 router = APIRouter()
 
 
-@router.post("/auth/signup", response_model=ResponseMessage, status_code=status.HTTP_201_CREATED)
-def create_customer(
+@router.post("/auth/signup", response_model=DataResponse[Customer], status_code=status.HTTP_201_CREATED)
+async def create_customer(
     *,
     db: Session = Depends(get_db),
     customer_in: CustomerCreate,
     response: Response
-) -> ResponseMessage:
+) -> DataResponse:
     """
-    Create a new customer.
+    Create a new customer with proper response handling and status codes.
     """
     try:
-        existing_customer = crud_customer.get_by_email(
-            db=db,
-            email=customer_in.email
-        )
+        existing_customer = crud_customer.get_by_email(db=db, email=str(customer_in.email).lower())
         if existing_customer:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return ResponseMessage(message="Customer with this email already exists for this business", status="error")
+            return DataResponse.error_response(
+                message="Customer with this email already exists",
+                data=None
+            )
+
         customer_in.password = hash_password(customer_in.password)
-        crud_customer.create(db=db, obj_in=customer_in)
+        new_customer = crud_customer.create(db=db, obj_in=customer_in)
         response.status_code = status.HTTP_201_CREATED
-        return ResponseMessage(message="Customer created successfully", status="success")
+        return DataResponse.success_response(
+            message="Customer created successfully",
+            data=new_customer,
+            status_code=status.HTTP_201_CREATED
+        )
     except Exception as e:
-        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+        response.status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message="Failed to create customer",
+            data=None,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-
-@router.post("/auth/verify_email", response_model=ResponseMessage)
-def get_customer(
+@router.post("/auth/verify_email", response_model=DataResponse)
+async def verify_email(
     *,
     db: Session = Depends(get_db),
     verification_in: VerificationRequest,
     response: Response
-) -> ResponseMessage:
+) -> DataResponse:
     """
-    Verify email.
+    Verify customer email with improved error handling.
     """
     try:
-        token = crud_customer.get_verification_token(db=db, token=verification_in.token, type="email")
+        token = crud_customer.get_verification_token(
+            db=db,
+            token=verification_in.token,
+            type="email"
+        )
+
         if not token:
             response.status_code = status.HTTP_404_NOT_FOUND
-            return ResponseMessage(message="Token not found", status="error")
+            return DataResponse.error_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Verification token not found"
+            )
+
         if token.status != "pending" or token.expires_at < func.now():
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return ResponseMessage(message="Invalid or expired token", status="error")
+            return DataResponse.error_response(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="Token has expired or is invalid"
+            )
+
         result = crud_customer.verify_token(db=db, db_obj=token)
         if result:
-            return ResponseMessage(message="Email verified successfully", status="success")
+            return DataResponse.success_response(
+                message="Email verified successfully"
+            )
+
         response.status_code = status.HTTP_400_BAD_REQUEST
-        return ResponseMessage(message="Email verification failed", status="error")
+        return DataResponse.error_response(
+            message="Email verification failed",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+        return DataResponse.error_response(
+            message=f"Verification process failed: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-@router.post("/auth/login", response_model=TokenResponse)
+@router.post("/auth/login", response_model=DataResponse[TokenResponse])
 async def customer_login(
-    login_data: LoginRequest,
-    response: Response,
-    db: Session = Depends(get_db)
-) -> TokenResponse:
+        *,
+        login_data: LoginRequest,
+        db: Session = Depends(get_db),
+        response: Response
+) -> DataResponse[TokenResponse]:
     """
-    Login customer using email and return JWT tokens.
-    """
-    customer = crud_customer.get_by_email(db, email=login_data.email)
-
-    if not customer:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
-        )
-
-    if customer.status != "active":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Customer account is not active"
-        )
-
-    # Verify password
-    if not verify_password(login_data.password, customer.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
-        )
-
-    # Create token pair
-    tokens = create_token_pair(customer.id, customer.email, actor="customer", ver="1")
-    response.set_cookie(
-        key="refresh_token",
-        value=tokens["refresh_token"],
-        httponly=True,
-        secure=True,  # only over HTTPS
-        samesite="strict"
-    )
-    return TokenResponse(**tokens)
-
-
-@router.post("/auth/refresh-token", response_model=ResponseMessage)
-async def refresh_token(
-    refresh_data: RefreshTokenRequest,
-    response: Response,
-    db: Session = Depends(get_db)
-) -> ResponseMessage:
-    """
-    Refresh access token using refresh token.
+    Customer login with enhanced response handling.
     """
     try:
-        tokens = refresh_access_token(refresh_data.refresh_token)
-        if not tokens:
+        customer = crud_customer.get_by_email(db, email=login_data.email)
+
+        if not customer:
             response.status_code = status.HTTP_401_UNAUTHORIZED
-            return ResponseMessage(message="Invalid refresh token", status="error")
+            return DataResponse.error_response(
+                message="Invalid credentials",
+                data=None,
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
+
+        if customer.status != "active":
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return DataResponse.error_response(
+                message="Customer account is not active",
+                data=None,
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+
+        if not verify_password(login_data.password, customer.password):
+            response.status_code=status.HTTP_401_UNAUTHORIZED
+            return DataResponse.error_response(
+                message="Invalid credentials",
+                data=None,
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
+
+        tokens = create_token_pair(customer.id, customer.email, actor="customer", ver="1")
         response.set_cookie(
             key="refresh_token",
             value=tokens["refresh_token"],
@@ -130,23 +143,76 @@ async def refresh_token(
             secure=True,  # only over HTTPS
             samesite="strict"
         )
-        return ResponseMessage(message="Token refreshed successfully", status="success")
+        return DataResponse.success_response(
+            message="Login successful",
+            data=TokenResponse(**tokens),
+        )
+
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+        return DataResponse.error_response(
+            message="Login failed",
+            data=None,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-@router.put("/auth/logout", response_model=ResponseMessage)
+
+@router.post("/auth/refresh-token", response_model=DataResponse[TokenResponse])
+async def refresh_token(
+    refresh_data: RefreshTokenRequest,
+    response: Response,
+    db: Session = Depends(get_db)
+) -> DataResponse:
+    """
+    Refresh access token using refresh token.
+    """
+    try:
+        tokens = refresh_access_token(refresh_data.refresh_token)
+        if not tokens:
+            response.status_code = status.HTTP_401_UNAUTHORIZED
+            return DataResponse.error_response(
+                message="Invalid credentials",
+                data=None,
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
+        response.set_cookie(
+            key="refresh_token",
+            value=tokens["refresh_token"],
+            httponly=True,
+            secure=True,  # only over HTTPS
+            samesite="strict"
+        )
+        return DataResponse.success_response(
+            message="Login successful",
+            data=TokenResponse(**tokens),
+        )
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message="Login failed",
+            data=None,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@router.put("/auth/logout", response_model=DataResponse)
 def logout_customer(
     response: Response
-) -> ResponseMessage:
+) -> DataResponse:
     """
     Logout customer by clearing the refresh token cookie.
     """
     try:
         response.delete_cookie(key="refresh_token")
-        return ResponseMessage(message="Logged out successfully", status="success")
+        return DataResponse.success_response(
+            message="Logged out successfully",
+            data=None
+        )
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+        return DataResponse.error_response(
+            message="Logout failed",
+            data=None,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 # TODO: Add endpoints for password reset, forgot password, etc.
