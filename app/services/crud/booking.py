@@ -1,5 +1,6 @@
 from datetime import timedelta
 from typing import List, Optional, Any
+from datetime import date
 
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
@@ -24,6 +25,13 @@ def get_user_bookings_in_range(db: Session, user_id: str, start_date: Any, end_d
         Bookings.start_at >= start_date,
         Bookings.end_at <= end_date
     ).all())
+
+def get_all_bookings_in_range(db: Session, start_date: date, end_date: date):
+    # Join Bookings and BookingServices, return tuples of (booking, user_id)
+    return db.query(Bookings, BookingServices.user_id).join(BookingServices, Bookings.id == BookingServices.booking_id).filter(
+        Bookings.start_at >= start_date,
+        Bookings.end_at <= end_date
+    ).all()
 #
 #     def get_multi_by_business(self, db: Session, business_id: int, skip: int = 0, limit: int = 100) -> List[Appointment]:
 #         return db.query(Appointment).filter(Appointment.business_id == business_id).offset(skip).limit(limit).all()

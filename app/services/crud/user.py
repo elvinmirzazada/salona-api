@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional
+from typing import Optional, List
 
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
@@ -12,6 +12,10 @@ from app.schemas.schemas import (
 
 def get(db: Session, id: UUID4) -> Optional[Users]:
     return db.query(Users).filter(Users.id == id).first()
+
+
+def get_all(db: Session) -> List[Users]:
+    return db.query(Users).all()
 
 
 def get_by_email(db: Session, email: str) -> Optional[Users]:

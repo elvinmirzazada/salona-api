@@ -29,6 +29,17 @@ def get_user_time_offs(
         UserTimeOffs.end_date >= start_date
     ).all())
 
+def get_all_availabilities(db: Session):
+    """Get all available user availabilities"""
+    return db.query(UserAvailabilities).filter(UserAvailabilities.is_available == True).all()
+
+def get_all_time_offs(db: Session, start_date: date, end_date: date):
+    """Get all time-offs within a date range"""
+    return db.query(UserTimeOffs).filter(
+        UserTimeOffs.start_date <= end_date,
+        UserTimeOffs.end_date >= start_date
+    ).all()
+
 def subtract_intervals(base_start: time, base_end: time, intervals: List[tuple]) -> List[tuple]:
     """Subtract intervals (bookings/time-offs) from a base interval. Returns list of available intervals."""
     result = [(base_start, base_end)]

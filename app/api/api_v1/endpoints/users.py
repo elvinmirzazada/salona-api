@@ -277,3 +277,85 @@ async def get_user_availability(
             message=f"Failed to retrieve availability: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@router.get("/availabilities", response_model=DataResponse[list[AvailabilityResponse]])
+async def get_all_users_availabilities(
+    *,
+    availability_type: AvailabilityType = Query(..., description="Type of availability check: daily, weekly, or monthly"),
+    date_from: date = Query(..., description="Start date for availability check"),
+    response: Response,
+    db: Session = Depends(get_db)
+) -> DataResponse[list[AvailabilityResponse]]:
+    """
+    Get availabilities for all users for a specific time range. Optimized to fetch all data in bulk and group bookings by user via BookingServices.
+    """
+    try:
+        users = crud_user.get_all(db)
+        if not users:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="No users found",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        # Bulk fetch all related data
+        availabilities = crud_availability.get_all_availabilities(db)
+        time_offs = crud_availability.get_all_time_offs(
+            db,
+            start_date=date_from,
+            end_date=date_from + timedelta(
+                days=1 if availability_type == AvailabilityType.DAILY else
+                     7 if availability_type == AvailabilityType.WEEKLY else 31
+            )
+        )
+        booking_tuples = crud_booking.get_all_bookings_in_range(
+            db,
+            start_date=date_from,
+            end_date=date_from + timedelta(
+                days=1 if availability_type == AvailabilityType.DAILY else
+                     7 if availability_type == AvailabilityType.WEEKLY else 31
+            )
+        )
+        # Group data by user
+        avail_map = {}
+        for a in availabilities:
+            avail_map.setdefault(str(a.user_id), []).append(a)
+        timeoff_map = {}
+        for t in time_offs:
+            timeoff_map.setdefault(str(t.user_id), []).append(t)
+        booking_map = {}
+        for booking, user_id in booking_tuples:
+            booking_map.setdefault(str(user_id), []).append(booking)
+        results = []
+        for user in users:
+            user_id = str(user.id)
+            user_avails = avail_map.get(user_id, [])
+            if not user_avails:
+                continue
+            user_timeoffs = timeoff_map.get(user_id, [])
+            user_bookings = booking_map.get(user_id, [])
+            availability = crud_availability.calculate_availability(
+                availabilities=user_avails,
+                time_offs=user_timeoffs,
+                bookings=user_bookings,
+                availability_type=availability_type,
+                date_from=date_from
+            )
+            results.append(availability)
+        if not results:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="No availabilities found for any user",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        return DataResponse.success_response(
+            data=results,
+            message="Availabilities retrieved successfully",
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to retrieve availabilities: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
