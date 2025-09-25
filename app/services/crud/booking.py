@@ -41,21 +41,21 @@ def get_all_bookings_in_range(db: Session, start_date: date, end_date: date):
 #
 
 
-def calc_service_params(db, services: List[BookingServiceRequest]):
+def calc_service_params(db, services: List[BookingServiceRequest], company_id: str = None) -> tuple[int, int]:
     total_duration = 0
     total_price = 0
 
     for srv in services:
-        selected_srv = service.get_company_service(db, srv.company_service_id)
-        total_duration += selected_srv.custom_duration
-        total_price += int(selected_srv.custom_price)
+        selected_srv = service.get_service(db, srv.category_service_id, company_id)
+        total_duration += selected_srv.duration
+        total_price += int(selected_srv.price)
 
     return total_duration, total_price
 
 
 
-def create(self, db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
-    total_duration, total_price = self.calc_service_params(db, obj_in.services)
+def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
+    total_duration, total_price = calc_service_params(db, obj_in.services, obj_in.company_id)
     db_obj = Bookings(
         customer_id=customer_id,
         company_id=obj_in.company_id,
@@ -69,10 +69,10 @@ def create(self, db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> B
 
     start_time = obj_in.start_time
     for srv in obj_in.services:
-        duration, _ = self.calc_service_params(db, obj_in.services)
+        duration, _ = calc_service_params(db, [srv], obj_in.company_id)
         db_service_obj = BookingServices(
             booking_id=db_obj.id,
-            company_service_id=srv.company_service_id,
+            category_service_id=srv.category_service_id,
             user_id=srv.user_id,
             notes=srv.notes,
             start_at=start_time,

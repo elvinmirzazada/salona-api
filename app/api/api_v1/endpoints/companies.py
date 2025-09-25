@@ -33,7 +33,7 @@ async def create_company(
     )
 
 
-@router.get("/users/{user_id}/availability", response_model=DataResponse[AvailabilityResponse])
+@router.get("/{company_id}/users/{user_id}/availability", response_model=DataResponse[AvailabilityResponse])
 async def get_user_availability(
         *,
         user_id: str,
@@ -41,7 +41,7 @@ async def get_user_availability(
         date_from: date = Query(..., description="Start date for availability check"),
         response: Response,
         db: Session = Depends(get_db),
-        company_id: str = Depends(get_current_company_id)
+        company_id: str
 ) -> DataResponse[AvailabilityResponse]:
     """
     Get user availability for a specific time range.
@@ -112,14 +112,14 @@ async def get_user_availability(
         )
 
 
-@router.get("/availabilities", response_model=DataResponse[list[AvailabilityResponse]])
+@router.get("/{company_id}/availabilities", response_model=DataResponse[list[AvailabilityResponse]])
 async def get_company_all_users_availabilities(
         *,
         availability_type: AvailabilityType = Query(..., description="Type of availability check: daily, weekly, or monthly"),
         date_from: date = Query(..., description="Start date for availability check"),
         response: Response,
         db: Session = Depends(get_db),
-        company_id: str = Depends(get_current_company_id)
+        company_id: str
 ) -> DataResponse[list[AvailabilityResponse]]:
     """
     Get availabilities for all users for a specific time range. Optimized to fetch all data in bulk and group bookings by user via BookingServices.

@@ -182,6 +182,29 @@ Links a booking to one or more company services.
 
 
 
+### Service Categories
+
+Defines categories for grouping services (e.g., Hair, Massage, Nails).
+
+| Field         | Type        | Description                       |
+| ------------- | ----------- | --------------------------------- |
+| `id`          | UUID        | Unique category ID                |
+| `name`        | String(255) | Name of the category              |
+| `description` | Text        | Optional description              |
+| `created_at`  | DateTime    | Timestamp of creation             |
+| `updated_at`  | DateTime    | Timestamp of last update          |
+
+### Service-Category Links
+
+Join table for many-to-many relationship between services and categories.
+
+| Field         | Type     | Description                       |
+| ------------- | -------- | --------------------------------- |
+| `id`          | UUID     | Unique link ID                    |
+| `service_id`  | UUID     | FK → `services.id`                |
+| `category_id` | UUID     | FK → `service_categories.id`      |
+| `created_at`  | DateTime | Timestamp of creation             |
+
 ### Global Services
 
 All services available in the system (predefined).

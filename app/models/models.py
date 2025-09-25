@@ -1,9 +1,10 @@
 import uuid
 
+from pydantic.v1 import create_model_from_typeddict
 from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID,
                         Time,
                         CheckConstraint)
-from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy.dialects.postgresql import ENUM as SQLAlchemyEnum
 from sqlalchemy.sql import func
 
 from app.db.base_class import BaseModel
@@ -24,6 +25,8 @@ class Users(BaseModel):
     phone = Column(String(20), nullable=False)
     status = Column(SQLAlchemyEnum(CustomerStatusType), default=CustomerStatusType.pending_verification)
     email_verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
 class UserAvailabilities(BaseModel):
@@ -277,27 +280,30 @@ class Bookings(BaseModel):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
-class GeneralServices(BaseModel):
-    __tablename__ = "general_services"
+class CompanyCategories(BaseModel):
+    __tablename__ = "company_categories"
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
-    name = Column(String(255), nullable=False)
-    default_duration = Column(Integer, nullable=False)
-    default_price = Column(Integer, nullable=False)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    name = Column(String(100), nullable=False)
     description = Column(Text)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
-class CompanyServices(BaseModel):
-    __tablename__ = "company_services"
+class CategoryServices(BaseModel):
+    __tablename__ = "category_services"
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
-    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
-    general_service_id = Column(UUID, ForeignKey("general_services.id", ondelete="CASCADE"))
-    custom_name = Column(String(255))
-    custom_duration = Column(Integer)
-    custom_price = Column(Integer)
+    category_id = Column(UUID, ForeignKey("company_categories.id", ondelete="CASCADE"))
+    name = Column(String(255))
+    duration = Column(Integer)
+    price = Column(Integer)
+    discount_price = Column(Integer)
+    additional_info = Column(Text)
+    status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
+    buffer_before = Column(Integer, default=0)  # in minutes
+    buffer_after = Column(Integer, default=0)   # in minutes
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -307,7 +313,7 @@ class BookingServices(BaseModel):
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
     booking_id = Column(UUID, ForeignKey("bookings.id", ondelete="CASCADE"))
-    company_service_id = Column(UUID, ForeignKey("company_services.id", ondelete="CASCADE"))
+    category_service_id = Column(UUID, ForeignKey("category_services.id", ondelete="CASCADE"))
     user_id = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"))
     notes = Column(Text)
     created_at = Column(DateTime, default=func.now())

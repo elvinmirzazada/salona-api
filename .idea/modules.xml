@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/salona-api.iml" filepath="$PROJECT_DIR$/.idea/salona-api.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../salona-customer/.idea/salona-customer.iml" filepath="$PROJECT_DIR$/../salona-customer/.idea/salona-customer.iml" />
     </modules>
   </component>
 </project>

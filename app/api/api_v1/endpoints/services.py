@@ -1,12 +1,55 @@
-# from typing import List
-# from fastapi import APIRouter, Depends, HTTPException, status
-# from sqlalchemy.orm import Session
-# from app.db.session import get_db
-# from app.schemas.schemas import Service, ServiceCreate, ServiceUpdate, ServiceWithDetails
-# from app.services.crud import service as crud_service, business as crud_business
-#
-# router = APIRouter()
-#
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from app.db.session import get_db
+from app.schemas.schemas import CompanyCategoryWithServicesResponse, CompanyUser
+from app.schemas.responses import DataResponse
+
+from app.services.crud import service as crud_service, user as crud_user
+from app.api.dependencies import get_current_company_id
+
+router = APIRouter()
+
+
+@router.get("/companies/{company_id}/services", response_model=DataResponse[List[CompanyCategoryWithServicesResponse]])
+def get_company_services(
+    company_id: str,
+    db: Session = Depends(get_db)
+) -> DataResponse:
+    """
+    Get service by company ID with details.
+    """
+    services = crud_service.get_company_services(db=db, company_id=company_id)
+    if not services:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found"
+        )
+    return DataResponse.success_response(
+        data=services,
+        message="Services fetched successfully"
+    )
+
+
+@router.get("/companies/{company_id}/users", response_model=DataResponse[List[CompanyUser]])
+def get_company_users(
+    company_id: str,
+    db: Session = Depends(get_db)
+) -> DataResponse:
+    """
+    Get users by company ID with details.
+    """
+    users = crud_user.get_company_users(db=db, company_id=company_id)
+    if not users:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found"
+        )
+    return DataResponse.success_response(
+        data=users,
+        message="Services fetched successfully"
+    )
+
 #
 # @router.post("/", response_model=Service, status_code=status.HTTP_201_CREATED)
 # def create_service(

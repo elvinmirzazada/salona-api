@@ -4,7 +4,9 @@ from typing import Optional, List
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 
+from app.models import CompanyUsers
 from app.models.models import (Users)
+from app.schemas import CompanyUser, User
 from app.schemas.schemas import (
     UserCreate
 )
@@ -38,3 +40,31 @@ def create(db: Session, *, obj_in: UserCreate) -> Users:
 #     db.commit()
 #     db.refresh(db_obj)
 #     return db_obj
+
+def get_company_users(db: Session, company_id: str) -> List[CompanyUser]:
+    """
+    Get all users for a company
+    """
+    users = db.query(CompanyUsers, Users).join(CompanyUsers, CompanyUsers.user_id==Users.id).filter(
+        Users.status == 'active', CompanyUsers.company_id == company_id, CompanyUsers.status == 'active'
+    ).all()
+    print(users)
+    result = []
+    for company_user, user in users:
+        result.append(CompanyUser(
+            user_id=company_user.user_id,
+            company_id=company_user.company_id,
+            role=company_user.role,
+            status=company_user.status,
+            user=User(
+                id=user.id,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                email=user.email,
+                phone=user.phone,
+                status=user.status,
+                created_at=user.created_at,
+                updated_at=user.updated_at
+            )
+        ))
+    return result

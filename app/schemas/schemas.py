@@ -36,15 +36,16 @@ class UserUpdate(BaseModel):
 class User(UserBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
     
-    id: str
+    id: UUID4
     status: CustomerStatusType
 
 
-# class CompanyUser(BaseModel):
-#     id: str
-#     user_id: str
-#     company_id: str
-
+class CompanyUser(BaseModel):
+    user_id: UUID4
+    company_id: UUID4
+    role: str
+    status: StatusType
+    user: User
 
 
 # Company schemas
@@ -75,6 +76,7 @@ class CustomerBase(BaseModel):
     last_name: str
     email: EmailStr
     phone: str
+    status: CustomerStatusType = CustomerStatusType.disabled
 
 
 class CustomerCreate(CustomerBase):
@@ -109,8 +111,14 @@ class BookingBase(BaseModel):
     status: BookingStatus = BookingStatus.SCHEDULED
     notes: Optional[str] = None
 
+class GuestCustomerInfo(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone: str
+
 class BookingServiceRequest(BaseModel):
-    company_service_id: UUID4
+    category_service_id: UUID4
     user_id: UUID4
     notes: Optional[str] = None
 
@@ -119,6 +127,7 @@ class BookingCreate(BaseModel):
     start_time: datetime
     services: List[BookingServiceRequest]
     notes: Optional[str] = None
+    customer_info: Optional[GuestCustomerInfo] = None  # For unregistered customers
 
 
 class BookingUpdate(BaseModel):
@@ -183,3 +192,21 @@ class AvailabilityResponse(BaseModel):
     daily: Optional[DailyAvailability] = None
     weekly: Optional[WeeklyAvailability] = None
     monthly: Optional[MonthlyAvailability] = None
+
+
+class CategoryServiceResponse(BaseModel):
+    id: UUID4
+    name: str
+    duration: int
+    price: float
+    discount_price: Optional[float] = None
+    status: StatusType
+    additional_info: Optional[str] = None
+    buffer_before: Optional[int] = 0
+    buffer_after: Optional[int] = 0
+
+class CompanyCategoryWithServicesResponse(BaseModel):
+    name: str
+    description: Optional[str] = None
+    services: List['CategoryServiceResponse'] = []
+
