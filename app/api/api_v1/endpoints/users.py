@@ -1,18 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
-from pydantic import UUID4
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
-from datetime import datetime, date, timedelta
+
+from app.api.dependencies import get_current_active_user
 from app.db.session import get_db
+from app.schemas import User
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.responses import DataResponse
 from app.schemas.schemas import ResponseMessage
-from app.schemas.schemas import UserCreate,AvailabilityResponse
+from app.schemas.schemas import UserCreate
 from app.services.auth import hash_password, verify_password, create_token_pair
 from app.services.crud import user as crud_user
-from app.services.crud import booking as crud_booking
-from app.models.enums import AvailabilityType
-from app.services.crud import user_availability as crud_availability
-
 
 router = APIRouter()
 
@@ -45,12 +42,12 @@ async def create_user(
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
 
 
-@router.post("/auth/login", response_model=TokenResponse)
+@router.post("/auth/login", response_model=DataResponse[TokenResponse])
 async def user_login(
     login_data: LoginRequest,
     response: Response,
     db: Session = Depends(get_db)
-) -> TokenResponse:
+) -> DataResponse:
     """
     Login professional using mobile number or email and return JWT tokens.
     """
@@ -69,9 +66,9 @@ async def user_login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
-
+    company = crud_user.get_company_by_user(db, user.id)
     # Create token pair
-    tokens = create_token_pair(user.id, user.email, actor="user", ver="1")
+    tokens = create_token_pair(user.id, user.email, actor="user", ver="1", company_id=str(company.company_id) if company else '')
     response.set_cookie(
         key="refresh_token",
         value=tokens["refresh_token"],
@@ -79,7 +76,7 @@ async def user_login(
         secure=True,  # only over HTTPS
         samesite="strict"
     )
-    return TokenResponse(**tokens)
+    return DataResponse.success_response(data = TokenResponse(**tokens))
 
 
 @router.put("/auth/logout")
@@ -93,3 +90,14 @@ async def logout_user(response: Response):
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+
+
+@router.get("/me", response_model=DataResponse[User])
+async def get_current_user(
+    *,
+    current_user: User = Depends(get_current_active_user)
+) -> DataResponse:
+    """
+    Get current logged-in user.
+    """
+    return DataResponse.success_response(data=current_user)

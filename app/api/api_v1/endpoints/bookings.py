@@ -6,13 +6,14 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.schemas.schemas import Booking, BookingCreate, BookingUpdate, AvailabilityResponse, CustomerCreate, Customer
+from app.schemas import User
+from app.schemas.schemas import Booking, BookingCreate, BookingUpdate, AvailabilityResponse, CustomerCreate, BookingWithDetails
 from app.services.crud import booking as crud_booking
 from app.services.crud import service as crud_service
 from app.services.crud import company as crud_company
 from app.services.crud import user as crud_user
 from app.services.crud import customer as crud_customer
-from app.api.dependencies import get_current_active_customer, get_token_payload
+from app.api.dependencies import get_current_company_id
 from app.schemas.responses import DataResponse
 from app.api.dependencies import get_current_customer
 
@@ -128,7 +129,7 @@ def get_booking(
         *,
         booking_id: str,
         db: Session = Depends(get_db),
-        current_customer: Customer = Depends(get_current_active_customer),
+        # current_customer: Customer = Depends(get_current_active_customer),
         response: Response
 ) -> DataResponse:
     """
@@ -150,22 +151,33 @@ def get_booking(
     )
 
 
-@router.get("", response_model=DataResponse[List[Booking]], status_code=status.HTTP_200_OK)
+@router.get("", response_model=DataResponse[List[BookingWithDetails]], status_code=status.HTTP_200_OK)
 def get_all_bookings(
         *,
         db: Session = Depends(get_db),
-        current_customer: Customer = Depends(get_current_active_customer),
-        response: Response
+        company_id: str = Depends(get_current_company_id),
+        start_date: Optional[date] = Query(None, description="Start date in YYYY-MM-DD format"),
+        end_date: Optional[date] = Query(None, description="End date in YYYY-MM-DD format")
 ) -> DataResponse:
     """
-    Get booking by ID with details.
+    Get bookings with details for a company within a date range.
     """
-    bookings = crud_booking.get_all(db=db)
+
+    if not start_date:
+        start_date = (datetime.now() - timedelta(days=datetime.now().weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    if not end_date:
+        end_date = (datetime.now() - timedelta(days=datetime.now().weekday()) + timedelta(days=7)).replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    bookings = crud_booking.get_all_bookings_in_range_by_company(db=db,
+                                                                 company_id=company_id,
+                                                                 start_date=start_date,
+                                                                 end_date=end_date)
+    print(bookings)
     if not bookings:
-        response.status_code = status.HTTP_404_NOT_FOUND
-        raise DataResponse.error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            message="Booking not found"
+        return DataResponse.success_response(
+            message="No bookings found",
+            data=[],
+            status_code=status.HTTP_200_OK
         )
     return DataResponse.success_response(
         message="",

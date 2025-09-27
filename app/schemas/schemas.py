@@ -97,7 +97,7 @@ class CustomerUpdate(BaseModel):
 class Customer(CustomerBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
     
-    id: str
+    id: UUID4
     status: CustomerStatusType
     created_at: datetime
 
@@ -143,6 +143,13 @@ class Booking(BookingBase, TimestampedModel):
 
     id: UUID4
     total_price: int
+
+
+class BookingWithDetails(Booking):
+    model_config = ConfigDict(from_attributes=True)
+
+    # Customer fields
+    customer: Optional[Customer] = None
 
 #
 
@@ -209,4 +216,3 @@ class CompanyCategoryWithServicesResponse(BaseModel):
     name: str
     description: Optional[str] = None
     services: List['CategoryServiceResponse'] = []
-

@@ -3,8 +3,9 @@ import uuid
 from pydantic.v1 import create_model_from_typeddict
 from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID,
                         Time,
-                        CheckConstraint)
+                        CheckConstraint, false)
 from sqlalchemy.dialects.postgresql import ENUM as SQLAlchemyEnum
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import BaseModel
@@ -217,6 +218,8 @@ class Customers(BaseModel):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
+    booking = relationship("Bookings", back_populates="customer")
+
 class CustomerEmails(BaseModel):
     __tablename__ = "customer_emails"
 
@@ -278,6 +281,8 @@ class Bookings(BaseModel):
 
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    customer = relationship("Customers", back_populates="booking")
 
 
 class CompanyCategories(BaseModel):

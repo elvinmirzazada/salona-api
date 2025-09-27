@@ -68,3 +68,8 @@ def get_company_users(db: Session, company_id: str) -> List[CompanyUser]:
             )
         ))
     return result
+
+
+def get_company_by_user(db: Session, user_id: str) -> Optional[CompanyUsers]:
+    return db.query(CompanyUsers).filter(
+        CompanyUsers.user_id == user_id).first()

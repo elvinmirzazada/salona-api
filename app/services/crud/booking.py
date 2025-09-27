@@ -5,7 +5,7 @@ from datetime import date
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 
-from app.models import BookingServices
+from app.models import BookingServices, Customers
 from app.models.models import Bookings
 from app.schemas import BookingServiceRequest
 from app.schemas.schemas import BookingCreate
@@ -32,14 +32,15 @@ def get_all_bookings_in_range(db: Session, start_date: date, end_date: date):
         Bookings.start_at >= start_date,
         Bookings.end_at <= end_date
     ).all()
-#
-#     def get_multi_by_business(self, db: Session, business_id: int, skip: int = 0, limit: int = 100) -> List[Appointment]:
-#         return db.query(Appointment).filter(Appointment.business_id == business_id).offset(skip).limit(limit).all()
-#
-#     def get_multi_by_client(self, db: Session, client_id: int, skip: int = 0, limit: int = 100) -> List[Appointment]:
-#         return db.query(Appointment).filter(Appointment.client_id == client_id).offset(skip).limit(limit).all()
-#
 
+
+def get_all_bookings_in_range_by_company(db: Session, company_id: str, start_date: date, end_date: date):
+    return (db.query(Bookings).join(BookingServices, Bookings.id == BookingServices.booking_id)
+          .filter(
+        Bookings.company_id == company_id,
+        Bookings.start_at >= start_date,
+        Bookings.end_at <= end_date
+    ).all())
 
 def calc_service_params(db, services: List[BookingServiceRequest], company_id: str = None) -> tuple[int, int]:
     total_duration = 0
