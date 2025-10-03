@@ -5,12 +5,16 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_active_user, get_current_active_customer, get_current_company_id
 from app.db.session import get_db
 from app.models.models import Users
-from app.schemas import CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType
+from app.schemas import CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, \
+    CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff
 from app.schemas.responses import DataResponse
 from app.services.crud import company as crud_company
+from app.services.crud import customer as crud_customer
+from app.services.crud import service as crud_service
 from app.services.crud import user_availability as crud_user_availability
 from app.services.crud import booking as crud_booking
 from app.services.crud import user as crud_user
+from app.services.crud import user_time_off as crud_user_time_off
 
 router = APIRouter()
 
@@ -223,45 +227,103 @@ async def get_company_all_users_availabilities(
 #     return business_staff
 #
 #
-# @router.get("/my-businesses", response_model=List[BusinessWithDetails])
-# async def get_my_businesses(
-#     db: Session = Depends(get_db),
-#     current_professional: Professional = Depends(get_current_active_professional),
-#     skip: int = 0,
-#     limit: int = 10,
-# ) -> List[Business]:
-#     """
-#     Get all businesses owned by the authenticated professional.
-#     """
-#     businesses = crud_business.business.get_multi_by_owner(
-#         db=db,
-#         owner_id=current_professional.id,
-#         skip=skip,
-#         limit=limit
-#     )
-#     return businesses
+@router.get("/users", response_model=DataResponse[List[CompanyUser]])
+async def get_company_users(
+        db: Session = Depends(get_db),
+        company_id: str = Depends(get_current_company_id),
+) -> DataResponse:
+    """
+    Get all businesses owned by the authenticated professional.
+    """
+    users = crud_company.get_company_users(
+        db=db, company_id=company_id
+    )
+    return DataResponse.success_response(
+        data=users,
+        message="Company users retrieved successfully",
+        status_code=status.HTTP_200_OK
+    )
+
+
+@router.get("/services", response_model=DataResponse[List[CompanyCategoryWithServicesResponse]])
+async def get_company_services(
+        db: Session = Depends(get_db),
+        company_id: str = Depends(get_current_company_id),
+) -> DataResponse:
+    """
+    Get all businesses owned by the authenticated professional.
+    """
+    services = crud_service.get_company_services(
+        db=db, company_id=company_id
+    )
+    return DataResponse.success_response(
+        data=services,
+        message="Company services retrieved successfully",
+        status_code=status.HTTP_200_OK
+    )
+
+
+@router.get('/customers', response_model=DataResponse[List[Customer]])
+async def get_company_customers(
+        db: Session = Depends(get_db),
+        company_id: str = Depends(get_current_company_id),
+) -> DataResponse:
+    """
+    Get all customers who have bookings with the authenticated professional's company.
+    """
+    customers = crud_customer.get_company_customers(
+        db=db, company_id=company_id
+    )
+
+    return DataResponse.success_response(
+        data=customers,
+        message="Company customers retrieved successfully",
+        status_code=status.HTTP_200_OK
+    )
+
+
+@router.get('/user-time-offs', response_model=DataResponse[List[TimeOff]])
+async def get_company_user_time_offs(
+        db: Session = Depends(get_db),
+        company_id: str = Depends(get_current_company_id),
+        availability_type: AvailabilityType = Query(..., description="Type of availability check: daily, weekly, or monthly"),
+        date_from: date = Query(..., description="Start date for availability check"),
+) -> DataResponse:
+    """
+    Get all customers who have bookings with the authenticated professional's company.
+    """
+    start_date = date_from
+    end_date = date_from + timedelta(
+        days=1 if availability_type == AvailabilityType.DAILY else
+        7 if availability_type == AvailabilityType.WEEKLY else 31
+    )
+    time_offs = crud_user_time_off.get_company_user_time_offs(
+        db=db, company_id=company_id, start_date=start_date, end_date=end_date
+    )
+
+    return DataResponse.success_response(
+        data=customers,
+        message="Company customers retrieved successfully",
+        status_code=status.HTTP_200_OK
+    )
 #
 #
-# @router.get("/{business_id}", response_model=BusinessWithDetails)
-# async def get_business(
-#     *,
-#     db: Session = Depends(get_db),
-#     business_id: int,
-#     current_professional: Professional = Depends(get_current_active_professional)
-# ) -> Business:
-#     """
-#     Get a specific business by ID.
-#     Only the owner can access their business details.
-#     """
-#     business = crud_business.business.get(db=db, id=business_id)
-#     if not business:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail="Business not found"
-#         )
-#     if business.owner_id != current_professional.id:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Not enough permissions to access this business"
-#         )
-#     return business
+@router.get("", response_model=DataResponse[Company])
+async def get_company(
+    *,
+    db: Session = Depends(get_db),
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Get a specific business by ID.
+    Only the owner can access their business details.
+    """
+    company = crud_company.get(db=db, id=company_id)
+    if not company:
+        return DataResponse.error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            message="Company not found"
+        )
+    return DataResponse.success_response(
+        data=company
+    )

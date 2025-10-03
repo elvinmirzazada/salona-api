@@ -4,7 +4,8 @@ from datetime import date
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 
-from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTimeOffs
+from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTimeOffs, CategoryServices, \
+    CompanyCategories
 from app.models.models import CompanyUsers, Companies
 from app.schemas.schemas import (
     CompanyCreate,
@@ -12,13 +13,19 @@ from app.schemas.schemas import (
 )
 
 
-def get(db: Session, id: UUID4) -> Optional[Companies]:
+def get(db: Session, id: str) -> Optional[Companies]:
     return db.query(Companies).filter(Companies.id == id).first()
 
 
 def get_company_users(db: Session, company_id: str) -> List[CompanyUsers]:
     """Get all users belonging to the given company."""
     return list(db.query(CompanyUsers).filter(CompanyUsers.company_id == company_id).all())
+
+
+def get_company_services(db: Session, company_id: str) -> List[CompanyCategories]:
+    """Get all services belonging to the given company."""
+    return list(db.query(CompanyCategories).join(CategoryServices, CategoryServices.category_id==CompanyCategories.id)
+                .filter(CompanyCategories.company_id == company_id).all())
 
 
 def get_company_all_users_availabilities(db: Session, company_id: str) -> List:

@@ -18,7 +18,7 @@ from app.models.enums import (StatusType, BookingStatus, CustomerStatusType, Ema
 class Users(BaseModel):
     __tablename__ = "users"
 
-    id = Column(UUID, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     email = Column(String(255), nullable=False, unique=True)
@@ -28,6 +28,9 @@ class Users(BaseModel):
     email_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    company_user = relationship("CompanyUsers", back_populates="user")
+    user_time_offs = relationship("UserTimeOffs", back_populates="user")
 
 
 class UserAvailabilities(BaseModel):
@@ -55,11 +58,13 @@ class UserTimeOffs(BaseModel):
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
     user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date, nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
     reason = Column(Text)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    user = relationship("Users", back_populates="user_time_offs")
 
 
 class Companies(BaseModel):
@@ -80,7 +85,7 @@ class Companies(BaseModel):
 class CompanyEmails(BaseModel):
     __tablename__ = "company_emails"
 
-    id = Column(UUID, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     email = Column(String(255), nullable=False, unique=True)
     status = Column(SQLAlchemyEnum(EmailStatusType), default=EmailStatusType.unverified)
@@ -123,85 +128,9 @@ class CompanyUsers(BaseModel):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
-    __table_args__ = (UniqueConstraint('user_id', 'company_id', name='_user_company_uc'),)
+    user = relationship("Users", back_populates="company_user")
 
-#
-#     # Relationships
-#     owner = relationship("Professional", back_populates="businesses")
-#     # categories = relationship("BusinessCategory", back_populates="business")
-#     service_types = relationship("ServiceType", back_populates="business")
-#     service_categories = relationship("ServiceCategory", back_populates="business")
-#     services = relationship("Service", back_populates="business")
-#     clients = relationship("Client", back_populates="business")
-#     appointments = relationship("Appointment", back_populates="business")
-#     staff = relationship("BusinessStaff", back_populates="business")
-#
-# # class BusinessStaff(BaseModel):
-# #     __tablename__ = "business_staff"
-# #
-# #     id = Column(Integer, primary_key=True, index=True)
-# #     business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
-# #     professional_id = Column(Integer, ForeignKey("professionals.id", ondelete="CASCADE"))
-# #     is_active = Column(Boolean, default=True)
-# #
-# #     # Relationships
-# #     business = relationship("Business", back_populates="staff")
-# #     professional = relationship("Professional")
-#
-#
-# class Category(BaseModel):
-#     __tablename__ = "categories"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     name = Column(String(100), nullable=False)
-#     icon_name = Column(String(50))
-#     created_at = Column(DateTime, default=func.now())
-#
-#     # Relationships
-#     # businesses = relationship("BusinessCategory", back_populates="category")
-#
-#
-# # class BusinessCategory(BaseModel):
-# #     __tablename__ = "business_categories"
-#
-# #     business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
-# #     category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True)
-# #     is_primary = Column(Boolean, default=False)
-# #     created_at = Column(DateTime, default=func.now())
-#
-# #     # Relationships
-# #     business = relationship("Business", back_populates="categories")
-# #     category = relationship("Category", back_populates="businesses")
-#
-#
-# class ServiceType(BaseModel):
-#     __tablename__ = "service_types"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     name = Column(String(100), nullable=False)
-#     parent_type_id = Column(Integer, ForeignKey("service_types.id", ondelete="SET NULL"))
-#     business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
-#
-#     # Relationships
-#     parent = relationship("ServiceType", remote_side=[id])
-#     business = relationship("Business", back_populates="service_types")
-#     services = relationship("Service", back_populates="service_type")
-#
-#
-# class ServiceCategory(BaseModel):
-#     __tablename__ = "service_categories"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     name = Column(String(100), nullable=False)
-#     color = Column(String(7))  # Hex color code
-#     description = Column(Text)
-#     business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
-#
-#     # Relationships
-#     business = relationship("Business", back_populates="service_categories")
-#     services = relationship("Service", back_populates="service_category")
-#
-#
+    __table_args__ = (UniqueConstraint('user_id', 'company_id', name='_user_company_uc'),)
 
 
 class Customers(BaseModel):
@@ -283,6 +212,7 @@ class Bookings(BaseModel):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     customer = relationship("Customers", back_populates="booking")
+    booking_services = relationship("BookingServices", back_populates="booking")
 
 
 class CompanyCategories(BaseModel):
@@ -294,6 +224,8 @@ class CompanyCategories(BaseModel):
     description = Column(Text)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    category_service = relationship("CategoryServices", back_populates="company_category")
 
 
 class CategoryServices(BaseModel):
@@ -312,6 +244,8 @@ class CategoryServices(BaseModel):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
+    company_category = relationship("CompanyCategories", back_populates="category_service")
+
 
 class BookingServices(BaseModel):
     __tablename__ = "booking_services"
@@ -325,3 +259,5 @@ class BookingServices(BaseModel):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     start_at = Column(DateTime, nullable=True)
     end_at = Column(DateTime, nullable=True)
+
+    booking = relationship("Bookings", back_populates="booking_services")

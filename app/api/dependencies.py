@@ -39,12 +39,11 @@ async def get_current_user(
     return user
 
 
-async def get_current_customer(
+def get_current_customer(
         credentials: HTTPAuthorizationCredentials = Depends(security),
         db: Session = Depends(get_db)
 ) -> Customers:
     """Get the current authenticated customer from JWT token."""
-    print(credentials)
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -54,7 +53,6 @@ async def get_current_customer(
     try:
         # Extract user ID from token
         customer_id = get_current_id(credentials.credentials)
-        print(customer_id)
         if customer_id is None:
             raise credentials_exception
 
@@ -63,7 +61,7 @@ async def get_current_customer(
 
     # Get user from database
     customer = crud_customer.get(db, id=customer_id)
-    print(customer)
+
     if customer is None:
         raise credentials_exception
 

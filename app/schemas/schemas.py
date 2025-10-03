@@ -2,7 +2,7 @@ from datetime import datetime, date, time
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict, UUID4
 
-from app.models import CustomerStatusType
+from app.models import CustomerStatusType, CompanyCategories
 from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType
 
 
@@ -40,12 +40,15 @@ class User(UserBase, TimestampedModel):
     status: CustomerStatusType
 
 
-class CompanyUser(BaseModel):
+class CompanyUser(TimestampedModel):
+    id: UUID4
     user_id: UUID4
     company_id: UUID4
     role: str
     status: StatusType
-    user: User
+
+    user: Optional[User] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Company schemas
@@ -67,7 +70,6 @@ class Company(CompanyBase, TimestampedModel):
     id: UUID4
 
     model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
-
 
 
 # Customer schemas
@@ -112,10 +114,11 @@ class BookingBase(BaseModel):
     notes: Optional[str] = None
 
 class GuestCustomerInfo(BaseModel):
-    first_name: str
-    last_name: str
-    email: EmailStr
-    phone: str
+    id: Optional[UUID4] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
 
 class BookingServiceRequest(BaseModel):
     category_service_id: UUID4
@@ -123,7 +126,7 @@ class BookingServiceRequest(BaseModel):
     notes: Optional[str] = None
 
 class BookingCreate(BaseModel):
-    company_id: UUID4
+    company_id: Optional[UUID4] = None
     start_time: datetime
     services: List[BookingServiceRequest]
     notes: Optional[str] = None
@@ -131,11 +134,27 @@ class BookingCreate(BaseModel):
 
 
 class BookingUpdate(BaseModel):
-    service_id: Optional[int] = None
-    client_id: Optional[int] = None
     start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    status: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[BookingStatus] = None
+    services: Optional[List[BookingServiceRequest]] = None
+
+
+
+
+class BookingService(TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    booking_id: UUID4
+    category_service_id: UUID4
+    user_id: UUID4
+    notes: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+    # service: Optional[CompanyCategories] = None
+    # assigned_user: Optional[CompanyUser] = None
 
 
 class Booking(BookingBase, TimestampedModel):
@@ -143,15 +162,16 @@ class Booking(BookingBase, TimestampedModel):
 
     id: UUID4
     total_price: int
-
-
-class BookingWithDetails(Booking):
-    model_config = ConfigDict(from_attributes=True)
-
-    # Customer fields
     customer: Optional[Customer] = None
+    booking_services: Optional[List[BookingService]] = []
+    user_ids: set[str] = set([])
+
 
 #
+class CompanyCustomers(Company):
+
+    model_config = ConfigDict(from_attributes=True)
+    customers: List[Customer] = []
 
 # # Enhanced schemas with relationships
 # class BusinessWithDetails(Business):
@@ -194,7 +214,7 @@ class MonthlyAvailability(BaseModel):
     weekly_slots: List[WeeklyAvailability]
 
 class AvailabilityResponse(BaseModel):
-    user_id: str
+    user_id: Optional[str]
     availability_type: AvailabilityType
     daily: Optional[DailyAvailability] = None
     weekly: Optional[WeeklyAvailability] = None
@@ -216,3 +236,24 @@ class CompanyCategoryWithServicesResponse(BaseModel):
     name: str
     description: Optional[str] = None
     services: List['CategoryServiceResponse'] = []
+
+# Time Off schemas
+class TimeOffBase(BaseModel):
+    start_date: datetime
+    end_date: datetime
+    user_id: UUID4
+    reason: Optional[str] = None
+
+class TimeOffCreate(TimeOffBase):
+    pass
+
+class TimeOffUpdate(BaseModel):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    reason: Optional[str] = None
+
+class TimeOff(TimeOffBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    user: User

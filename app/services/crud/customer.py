@@ -1,10 +1,12 @@
 import uuid
-from typing import Optional
+from typing import Optional, List
 
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 
+from app.models import Companies, Bookings
 from app.models.models import (Customers, CustomerVerifications, CustomerEmails)
+from app.schemas import CompanyCustomers
 from app.schemas.schemas import (
     CustomerCreate, CustomerUpdate
 )
@@ -50,4 +52,10 @@ def verify_token(db: Session, db_obj: CustomerVerifications) -> CustomerVerifica
     db.commit()
     db.refresh(db_obj)
     return db_obj
+
+
+def get_company_customers(db: Session, company_id: str) -> List[Customers]:
+    """Get all customers belonging to the given company."""
+    return list(db.query(Customers).join(Bookings, Customers.id==Bookings.customer_id)
+                .filter(Bookings.company_id == company_id, Customers.status=='active', Customers.email_verified==True).all())
 

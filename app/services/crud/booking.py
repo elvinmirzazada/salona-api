@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.models import BookingServices, Customers
 from app.models.models import Bookings
+from app.models.enums import BookingStatus
 from app.schemas import BookingServiceRequest
-from app.schemas.schemas import BookingCreate
+from app.schemas.schemas import BookingCreate, BookingUpdate
 from app.services.crud import service
 
 
@@ -39,7 +40,8 @@ def get_all_bookings_in_range_by_company(db: Session, company_id: str, start_dat
           .filter(
         Bookings.company_id == company_id,
         Bookings.start_at >= start_date,
-        Bookings.end_at <= end_date
+        Bookings.end_at <= end_date,
+        Bookings.status.in_(['scheduled', 'confirmed', 'completed'])
     ).all())
 
 def calc_service_params(db, services: List[BookingServiceRequest], company_id: str = None) -> tuple[int, int]:
@@ -52,7 +54,6 @@ def calc_service_params(db, services: List[BookingServiceRequest], company_id: s
         total_price += int(selected_srv.price)
 
     return total_duration, total_price
-
 
 
 def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
@@ -85,3 +86,77 @@ def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Booking
     db.commit()
     db.refresh(db_obj)
     return db_obj
+
+
+def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
+    """
+    Update a booking and its associated services.
+    """
+    # Update basic booking fields
+    if obj_in.start_time is not None:
+        db_obj.start_at = obj_in.start_time
+    if obj_in.notes is not None:
+        db_obj.notes = obj_in.notes
+    if obj_in.status is not None:
+        db_obj.status = obj_in.status
+
+    # If services are being updated, we need to recalculate everything
+    if obj_in.services is not None:
+        # Remove existing booking services
+        db.query(BookingServices).filter(BookingServices.booking_id == db_obj.id).delete()
+
+        # Recalculate total duration and price
+        total_duration, total_price = calc_service_params(db, obj_in.services, str(db_obj.company_id))
+        db_obj.total_price = total_price
+
+        # Update end time based on new start time and duration
+        start_time = obj_in.start_time if obj_in.start_time is not None else db_obj.start_at
+        db_obj.end_at = start_time + timedelta(minutes=total_duration)
+
+        # Create new booking services
+        current_start_time = start_time
+        for srv in obj_in.services:
+            duration, _ = calc_service_params(db, [srv], str(db_obj.company_id))
+            db_service_obj = BookingServices(
+                booking_id=db_obj.id,
+                category_service_id=srv.category_service_id,
+                user_id=srv.user_id,
+                notes=srv.notes,
+                start_at=current_start_time,
+                end_at=current_start_time + timedelta(minutes=duration)
+            )
+            current_start_time = db_service_obj.end_at
+            db.add(db_service_obj)
+
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+
+def cancel(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
+    """
+    Cancel a booking by setting its status to CANCELLED.
+    Returns the updated booking or None if booking not found.
+    """
+    db_obj = db.query(Bookings).filter(Bookings.id == booking_id).first()
+    if db_obj:
+        db_obj.status = BookingStatus.CANCELLED
+        db.add(db_obj)
+        db.flush()  # Flush to get the updated object but don't commit yet
+        return db_obj
+    return None
+
+
+def confirm(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
+    """
+    Confirm a booking by setting its status to CONFIRMED.
+    Returns the updated booking or None if booking not found.
+    """
+    db_obj = db.query(Bookings).filter(Bookings.id == booking_id).first()
+    if db_obj:
+        db_obj.status = BookingStatus.CONFIRMED
+        db.add(db_obj)
+        db.flush()  # Flush to get the updated object but don't commit yet
+        return db_obj
+    return None

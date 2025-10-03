@@ -1,15 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
 from sqlalchemy.orm import Session
+from typing import List
+from datetime import date, datetime, timedelta
 
-from app.api.dependencies import get_current_active_user
+from app.api.dependencies import get_current_active_user, get_current_company_id
 from app.db.session import get_db
+from app.models import AvailabilityType
 from app.schemas import User
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.responses import DataResponse
-from app.schemas.schemas import ResponseMessage
+from app.schemas.schemas import ResponseMessage, TimeOffCreate, TimeOff, TimeOffUpdate
 from app.schemas.schemas import UserCreate
 from app.services.auth import hash_password, verify_password, create_token_pair
 from app.services.crud import user as crud_user
+from app.services.crud import user_time_off as crud_time_off
 
 router = APIRouter()
 
@@ -76,6 +80,7 @@ async def user_login(
         secure=True,  # only over HTTPS
         samesite="strict"
     )
+    print(tokens)
     return DataResponse.success_response(data = TokenResponse(**tokens))
 
 
@@ -101,3 +106,211 @@ async def get_current_user(
     Get current logged-in user.
     """
     return DataResponse.success_response(data=current_user)
+
+
+@router.post("/time-offs", response_model=DataResponse[TimeOff], status_code=status.HTTP_201_CREATED)
+async def create_time_off(
+    *,
+    db: Session = Depends(get_db),
+    time_off_in: TimeOffCreate,
+    response: Response,
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Create a new time off period for the current user.
+    """
+    try:
+        # Check for overlapping time offs
+        has_overlap = crud_time_off.check_overlapping_time_offs(
+            db=db,
+            user_id=time_off_in.user_id,
+            start_date=time_off_in.start_date,
+            end_date=time_off_in.end_date
+        )
+
+        if has_overlap:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                message="The time off period overlaps with existing ones",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create the time off
+        time_off = crud_time_off.create(
+            db=db,
+            obj_in=time_off_in,
+            company_id=company_id
+        )
+
+        return DataResponse.success_response(
+            message="Time off created successfully",
+            data=time_off,
+            status_code=status.HTTP_201_CREATED
+        )
+    except ValueError as e:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to create time off: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.get("/time-offs", response_model=DataResponse[List[TimeOff]], status_code=status.HTTP_200_OK)
+async def get_all_user_time_offs(
+    *,
+    db: Session = Depends(get_db),
+    start_date: datetime = Query(datetime.today(), description="Filter time offs that end after this date"),
+    availability_type: AvailabilityType = Query(AvailabilityType.WEEKLY, description="Type of availability check: daily, weekly, or monthly"),
+    response: Response,
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Get all time offs for the current user with optional date filtering.
+    """
+    try:
+        end_date = start_date + timedelta(
+                days=1 if availability_type == AvailabilityType.DAILY else
+                     7 if availability_type == AvailabilityType.WEEKLY else 31
+            )
+        time_offs = crud_time_off.get_user_time_offs(
+            db=db,
+            company_id=company_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        return DataResponse.success_response(
+            data=time_offs,
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to retrieve time offs: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.put("/time-offs/{time_off_id}", response_model=DataResponse[TimeOff], status_code=status.HTTP_200_OK)
+async def update_time_off(
+    *,
+    time_off_id: str,
+    db: Session = Depends(get_db),
+    time_off_in: TimeOffUpdate,
+    response: Response,
+    current_user: User = Depends(get_current_active_user)
+) -> DataResponse:
+    """
+    Update an existing time off period.
+    """
+    try:
+        # Get the time off by ID
+        time_off = crud_time_off.get(db=db, time_off_id=time_off_id)
+        if not time_off:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="Time off not found",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if the time off belongs to the current user
+        if str(time_off.user_id) != str(current_user.id):
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return DataResponse.error_response(
+                message="You don't have permission to update this time off",
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+
+        # Determine the new start and end dates for overlap check
+        start_date = time_off_in.start_date if time_off_in.start_date is not None else time_off.start_date
+        end_date = time_off_in.end_date if time_off_in.end_date is not None else time_off.end_date
+
+        # Check for overlapping time offs
+        has_overlap = crud_time_off.check_overlapping_time_offs(
+            db=db,
+            user_id=current_user.id,
+            start_date=start_date,
+            end_date=end_date,
+            exclude_id=time_off_id
+        )
+
+        if has_overlap:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                message="The updated time off period overlaps with existing ones",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update the time off
+        updated_time_off = crud_time_off.update(
+            db=db,
+            db_obj=time_off,
+            obj_in=time_off_in
+        )
+
+        return DataResponse.success_response(
+            message="Time off updated successfully",
+            data=updated_time_off,
+            status_code=status.HTTP_200_OK
+        )
+    except ValueError as e:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to update time off: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.delete("/time-offs/{time_off_id}", response_model=DataResponse, status_code=status.HTTP_200_OK)
+async def delete_time_off(
+    *,
+    time_off_id: str,
+    db: Session = Depends(get_db),
+    response: Response,
+    current_user: User = Depends(get_current_active_user)
+) -> DataResponse:
+    """
+    Delete a time off period.
+    """
+    # Get the time off by ID
+    time_off = crud_time_off.get(db=db, time_off_id=time_off_id)
+    if not time_off:
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return DataResponse.error_response(
+            message="Time off not found",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check if the time off belongs to the current user
+    if str(time_off.user_id) != str(current_user.id):
+        response.status_code = status.HTTP_403_FORBIDDEN
+        return DataResponse.error_response(
+            message="You don't have permission to delete this time off",
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+
+    # Delete the time off
+    deleted = crud_time_off.delete(db=db, time_off_id=time_off_id)
+    if not deleted:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message="Failed to delete time off",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    return DataResponse.success_response(
+        message="Time off deleted successfully",
+        status_code=status.HTTP_200_OK
+    )

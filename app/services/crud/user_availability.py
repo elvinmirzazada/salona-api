@@ -108,7 +108,7 @@ def calculate_availability(
                 daily=daily
             )
         elif availability_type == AvailabilityType.WEEKLY:
-            week_start = date_from - timedelta(days=date_from.weekday())
+            week_start = date_from
             week_end = week_start + timedelta(days=6)
             daily_slots = []
             current_date = week_start
