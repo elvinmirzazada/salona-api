@@ -6,7 +6,8 @@ from app.api.dependencies import get_current_active_user, get_current_active_cus
 from app.db.session import get_db
 from app.models.models import Users
 from app.schemas import CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, \
-    CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff
+    CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate, \
+    CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone
 from app.schemas.responses import DataResponse
 from app.services.crud import company as crud_company
 from app.services.crud import customer as crud_customer
@@ -235,6 +236,11 @@ async def get_company_users(
     """
     Get all businesses owned by the authenticated professional.
     """
+    if not company_id:
+        return DataResponse.error_response(
+            message="No company associated with the current user",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
     users = crud_company.get_company_users(
         db=db, company_id=company_id
     )
@@ -302,8 +308,8 @@ async def get_company_user_time_offs(
     )
 
     return DataResponse.success_response(
-        data=customers,
-        message="Company customers retrieved successfully",
+        data=time_offs,
+        message="Company user time offs retrieved successfully",
         status_code=status.HTTP_200_OK
     )
 #
@@ -326,4 +332,178 @@ async def get_company(
         )
     return DataResponse.success_response(
         data=company
+    )
+
+
+@router.put("", response_model=DataResponse[Company])
+async def update_company(
+    *,
+    db: Session = Depends(get_db),
+    company_in: CompanyUpdate,
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Update company information.
+    Only users with appropriate permissions can update the company details.
+    """
+    company = crud_company.get(db=db, id=company_id)
+    if not company:
+        return DataResponse.error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            message="Company not found"
+        )
+
+    try:
+        updated_company = crud_company.update(
+            db=db,
+            db_obj=company,
+            obj_in=company_in.model_dump(exclude_unset=True)
+        )
+        return DataResponse.success_response(
+            data=updated_company,
+            message="Company information updated successfully"
+        )
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to update company information: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.post("/emails", response_model=DataResponse, status_code=status.HTTP_201_CREATED)
+async def add_company_email(
+    *,
+    db: Session = Depends(get_db),
+    email_in: CompanyEmailCreate,
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Add a new email address to the company.
+    """
+    try:
+        email_in.company_id = company_id
+        crud_company.create_company_email(db=db, obj_in=email_in)
+
+        return DataResponse.success_response(
+            message="Emails added successfully",
+            status_code=status.HTTP_201_CREATED
+        )
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to add emails: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.get("/emails", response_model=DataResponse[List[CompanyEmail]])
+async def get_company_emails(
+    *,
+    db: Session = Depends(get_db),
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Get all email addresses associated with the company.
+    """
+    emails = crud_company.get_company_emails(db=db, company_id=company_id)
+
+    return DataResponse.success_response(
+        data=emails,
+        message="Company emails retrieved successfully",
+        status_code=status.HTTP_200_OK
+    )
+
+
+@router.delete("/emails/{email_id}", response_model=DataResponse)
+async def delete_company_email(
+    *,
+    db: Session = Depends(get_db),
+    email_id: str,
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Delete an email address from the company.
+    """
+    success = crud_company.delete_company_email(db=db, email_id=email_id, company_id=company_id)
+
+    if not success:
+        return DataResponse.error_response(
+            message="Email not found or does not belong to this company",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    return DataResponse.success_response(
+        message="Email deleted successfully",
+        status_code=status.HTTP_200_OK
+    )
+
+
+@router.post("/phones", response_model=DataResponse[List[CompanyPhone]], status_code=status.HTTP_201_CREATED)
+async def add_company_phone(
+    *,
+    db: Session = Depends(get_db),
+    phone_in: CompanyPhoneCreate,
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Add new phone numbers to the company.
+    """
+    try:
+        # Set the company ID from the authenticated user's context
+        phone_in.company_id = company_id
+        phones = crud_company.create_company_phone(db=db, obj_in=phone_in)
+
+        return DataResponse.success_response(
+            data=phones,
+            message="Phone numbers added successfully",
+            status_code=status.HTTP_201_CREATED
+        )
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to add phone numbers: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.get("/phones", response_model=DataResponse[List[CompanyPhone]])
+async def get_company_phones(
+    *,
+    db: Session = Depends(get_db),
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Get all phone numbers associated with the company.
+    """
+    phones = crud_company.get_company_phones(db=db, company_id=company_id)
+
+    return DataResponse.success_response(
+        data=phones,
+        message="Company phone numbers retrieved successfully",
+        status_code=status.HTTP_200_OK
+    )
+
+
+@router.delete("/phones/{phone_id}", response_model=DataResponse)
+async def delete_company_phone(
+    *,
+    db: Session = Depends(get_db),
+    phone_id: str,
+    company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Delete a phone number from the company.
+    """
+    success = crud_company.delete_company_phone(db=db, phone_id=phone_id, company_id=company_id)
+
+    if not success:
+        return DataResponse.error_response(
+            message="Phone number not found or does not belong to this company",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    return DataResponse.success_response(
+        message="Phone number deleted successfully",
+        status_code=status.HTTP_200_OK
     )

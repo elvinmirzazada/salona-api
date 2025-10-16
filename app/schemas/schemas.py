@@ -3,7 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict, UUID4
 
 from app.models import CustomerStatusType, CompanyCategories
-from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType
+from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType, EmailStatusType, PhoneStatusType
 
 
 # Base schemas
@@ -64,6 +64,16 @@ class CompanyBase(BaseModel):
 
 class CompanyCreate(CompanyBase):
     pass
+
+
+class CompanyUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    logo_url: Optional[str] = None
+    website: Optional[str] = None
+    description: Optional[str] = None
+    team_size: Optional[int] = None
+    status: Optional[StatusType] = None
 
 
 class Company(CompanyBase, TimestampedModel):
@@ -232,7 +242,52 @@ class CategoryServiceResponse(BaseModel):
     buffer_before: Optional[int] = 0
     buffer_after: Optional[int] = 0
 
+class CategoryServiceBase(BaseModel):
+    name: str
+    duration: int
+    price: float
+    discount_price: Optional[float] = None
+    additional_info: Optional[str] = None
+    status: StatusType = StatusType.active
+    buffer_before: Optional[int] = 0
+    buffer_after: Optional[int] = 0
+
+class CategoryServiceCreate(CategoryServiceBase):
+    category_id: str
+
+class CategoryServiceUpdate(BaseModel):
+    name: Optional[str] = None
+    duration: Optional[int] = None
+    price: Optional[float] = None
+    discount_price: Optional[float] = None
+    additional_info: Optional[str] = None
+    status: Optional[StatusType] = None
+    buffer_before: Optional[int] = None
+    buffer_after: Optional[int] = None
+
+
+class CompanyCategoryBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class CompanyCategoryCreate(CompanyCategoryBase):
+    company_id: Optional[str] = None
+
+class CompanyCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    company_id: Optional[str] = None
+
+class CompanyCategory(CompanyCategoryBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    company_id: UUID4
+
+
+# CompanyCategoryWithServicesResponse already exists
 class CompanyCategoryWithServicesResponse(BaseModel):
+    id: UUID4
     name: str
     description: Optional[str] = None
     services: List['CategoryServiceResponse'] = []
@@ -257,3 +312,34 @@ class TimeOff(TimeOffBase, TimestampedModel):
 
     id: UUID4
     user: User
+
+
+class CompanyEmailBase(BaseModel):
+    email: EmailStr
+    status: EmailStatusType = EmailStatusType.unverified
+
+class CompanyEmailCreate(BaseModel):
+    emails: List[CompanyEmailBase] = []
+    company_id: Optional[str] = None
+
+class CompanyEmail(CompanyEmailBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    company_id: UUID4
+
+
+class CompanyPhoneBase(BaseModel):
+    phone: str
+    is_primary: bool = False
+    status: PhoneStatusType = PhoneStatusType.unverified
+
+class CompanyPhoneCreate(BaseModel):
+    company_phones: List[CompanyPhoneBase] = []
+    company_id: Optional[str] = None
+
+class CompanyPhone(CompanyPhoneBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    company_id: UUID4

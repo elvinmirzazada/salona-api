@@ -34,7 +34,8 @@ app.add_middleware(
         "Content-Type",
         "Accept",
         "Origin",
-        "X-Requested-With"
+        "X-Requested-With",
+        "X-CSRFToken"  # Added CSRF token header
     ],
     expose_headers=["*"],
     max_age=600  # Cache preflight requests for 10 minutes

@@ -70,7 +70,7 @@ class UserTimeOffs(BaseModel):
 class Companies(BaseModel):
     __tablename__ = "companies"
 
-    id = Column(UUID, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     type = Column(String(255), nullable=False)
     logo_url = Column(String(255))
@@ -95,7 +95,7 @@ class CompanyEmails(BaseModel):
 class CompanyPhones(BaseModel):
     __tablename__ = "company_phones"
 
-    id = Column(UUID, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     phone = Column(String(20), nullable=False)
     is_primary = Column(Boolean, default=False)
@@ -106,7 +106,7 @@ class CompanyPhones(BaseModel):
 class CompanyAddresses(BaseModel):
     __tablename__ = "company_addresses"
 
-    id = Column(UUID, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     address = Column(String(255), nullable=False)
     city = Column(String(100), nullable=False)
@@ -120,7 +120,7 @@ class CompanyAddresses(BaseModel):
 class CompanyUsers(BaseModel):
     __tablename__ = "company_users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     role = Column(SQLAlchemyEnum(CompanyRoleType), default=CompanyRoleType.viewer)  # e.g., admin, member

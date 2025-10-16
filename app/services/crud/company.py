@@ -5,8 +5,9 @@ from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 
 from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTimeOffs, CategoryServices, \
-    CompanyCategories
+    CompanyCategories, CompanyEmails, CompanyPhones
 from app.models.models import CompanyUsers, Companies
+from app.schemas import CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate
 from app.schemas.schemas import (
     CompanyCreate,
     User
@@ -73,6 +74,8 @@ def create(db: Session, *, obj_in: CompanyCreate, current_user: User) -> Compani
     db_obj = Companies(**obj_in.model_dump())
     # db_obj.id = str(uuid.uuid4())
     db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
 
     cmp_usr_obj = CompanyUsers(user_id=current_user.id,
                                company_id=db_obj.id,
@@ -84,14 +87,175 @@ def create(db: Session, *, obj_in: CompanyCreate, current_user: User) -> Compani
 
     return db_obj
 
-#
-#     def update(self, db: Session, *, db_obj: Business, obj_in: BusinessUpdate) -> Business:
-#         update_data = obj_in.model_dump(exclude_unset=True)
-#         for field, value in update_data.items():
-#             setattr(db_obj, field, value)
-#         db.add(db_obj)
-#         db.commit()
-#         db.refresh(db_obj)
-#         return db_obj
-#
-#
+
+def update(db: Session, *, db_obj: Companies, obj_in: dict) -> Companies:
+    """
+    Update company information
+
+    Args:
+        db: Database session
+        db_obj: Existing company object to update
+        obj_in: Data to update the company with
+
+    Returns:
+        Updated company object
+    """
+    for field, value in obj_in.items():
+        if value is not None:
+            setattr(db_obj, field, value)
+
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+
+def create_company_email(db: Session, *, obj_in: CompanyEmailCreate):
+    """
+    Create new emails for a company, handling duplicate emails
+
+    Args:
+        db: Database session
+        obj_in: Data with company emails to add
+
+    Returns:
+        List of created/updated email objects
+    """
+    # Get existing emails for this company to check duplicates
+    existing_emails = db.query(CompanyEmails).filter(
+        CompanyEmails.company_id == obj_in.company_id
+    ).all()
+
+    # Create a set of existing email addresses for efficient lookup
+    existing_email_set = {str(email.email).lower() for email in existing_emails}
+
+    for email in obj_in.emails:
+        # Check if this email already exists for this company
+        if str(email.email).lower() in existing_email_set:
+            # Skip this email as it already exists
+            continue
+
+        # Create new email record
+        db_obj = CompanyEmails(
+            company_id=obj_in.company_id,
+            email=str(email.email).lower(),
+            status=email.status.lower()
+        )
+        db_obj.id = str(uuid.uuid4())
+        db.add(db_obj)
+
+    # Commit all new emails at once
+    db.commit()
+
+
+def get_company_emails(db: Session, company_id: str) -> List[CompanyEmails]:
+    """
+    Get all emails for a specific company
+    """
+    company_emails = db.query(CompanyEmails).filter(CompanyEmails.company_id == company_id).all()
+
+    return company_emails
+
+
+
+def get_company_email(db: Session, email_id: str) -> Optional[CompanyEmails]:
+    """
+    Get a specific company email by ID
+    """
+    return db.query(CompanyEmails).filter(CompanyEmails.id == email_id).first()
+
+
+def delete_company_email(db: Session, email_id: str, company_id: str) -> bool:
+    """
+    Delete a company email
+    """
+    db_obj = db.query(CompanyEmails).filter(
+        CompanyEmails.id == email_id,
+        CompanyEmails.company_id == company_id
+    ).first()
+
+    if not db_obj:
+        return False
+
+    db.delete(db_obj)
+    db.commit()
+    return True
+
+
+def create_company_phone(db: Session, *, obj_in: CompanyPhoneCreate) -> List[CompanyPhones]:
+    """
+    Create new phone numbers for a company, handling duplicate phone numbers
+
+    Args:
+        db: Database session
+        obj_in: Data with company phone numbers to add
+
+    Returns:
+        List of created phone number objects
+    """
+    # Get existing phone numbers for this company to check duplicates
+    existing_phones = db.query(CompanyPhones).filter(
+        CompanyPhones.company_id == obj_in.company_id
+    ).all()
+
+    # Create a set of existing phone numbers for efficient lookup
+    existing_phone_set = {phone.phone for phone in existing_phones}
+
+    created_phones = []
+    for phone_data in obj_in.company_phones:
+        # Check if this phone number already exists for this company
+        if phone_data.phone in existing_phone_set:
+            # Skip this phone number as it already exists
+            continue
+
+        # Create new phone number record
+        db_obj = CompanyPhones(
+            company_id=obj_in.company_id,
+            phone=phone_data.phone,
+            is_primary=phone_data.is_primary,
+            status=phone_data.status
+        )
+        # db_obj.id = str(uuid.uuid4())
+        
+        db.add(db_obj)
+        created_phones.append(db_obj)
+        
+    # Commit all new phone numbers at once
+    db.commit()
+
+    # Refresh all newly created objects
+    for phone in created_phones:
+        db.refresh(phone)
+
+    return created_phones
+
+
+def get_company_phones(db: Session, company_id: str) -> List[CompanyPhones]:
+    """
+    Get all phone numbers for a specific company
+    """
+    return db.query(CompanyPhones).filter(CompanyPhones.company_id == company_id).all()
+
+
+def get_company_phone(db: Session, phone_id: str) -> Optional[CompanyPhones]:
+    """
+    Get a specific company phone by ID
+    """
+    return db.query(CompanyPhones).filter(CompanyPhones.id == phone_id).first()
+
+
+def delete_company_phone(db: Session, phone_id: str, company_id: str) -> bool:
+    """
+    Delete a company phone number
+    """
+    db_obj = db.query(CompanyPhones).filter(
+        CompanyPhones.id == phone_id,
+        CompanyPhones.company_id == company_id
+    ).first()
+    
+    if not db_obj:
+        return False
+
+    db.delete(db_obj)
+    db.commit()
+    return True

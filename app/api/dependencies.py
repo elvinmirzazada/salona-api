@@ -109,6 +109,4 @@ async def get_current_active_customer(
 
 def get_current_company_id(token_payload: dict = Depends(get_token_payload)) -> str:
     company_id = token_payload.get("company_id")
-    if not company_id:
-        raise HTTPException(status_code=403, detail="Company context required")
     return company_id

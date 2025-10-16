@@ -179,7 +179,11 @@ async def get_all_bookings(
     """
     Get bookings with details for a company within a date range.
     """
-
+    if not company_id:
+        raise DataResponse.error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Company ID is required"
+        )
     if not start_date:
         start_date = (datetime.now() - timedelta(days=datetime.now().weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     if not end_date:
