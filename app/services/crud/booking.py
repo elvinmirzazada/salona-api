@@ -11,6 +11,7 @@ from app.models.enums import BookingStatus
 from app.schemas import BookingServiceRequest
 from app.schemas.schemas import BookingCreate, BookingUpdate
 from app.services.crud import service
+from app.core.redis_client import publish_event
 
 
 def get(db: Session, id: UUID4) -> Optional[Bookings]:
@@ -85,6 +86,8 @@ def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Booking
 
     db.commit()
     db.refresh(db_obj)
+    # Publish booking created event
+    publish_event("booking_created", str(db_obj.id))
     return db_obj
 
 

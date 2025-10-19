@@ -3,7 +3,7 @@ import uuid
 from pydantic.v1 import create_model_from_typeddict
 from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID,
                         Time,
-                        CheckConstraint, false)
+                        CheckConstraint, false, BLOB, LargeBinary)
 from sqlalchemy.dialects.postgresql import ENUM as SQLAlchemyEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -11,7 +11,7 @@ from sqlalchemy.sql import func
 from app.db.base_class import BaseModel
 from app.models.enums import (StatusType, BookingStatus, CustomerStatusType, EmailStatusType,
                               PhoneStatusType, VerificationType, VerificationStatus,
-                              CompanyRoleType)
+                              CompanyRoleType, NotificationType, NotificationStatus)
 
 
 #
@@ -261,3 +261,18 @@ class BookingServices(BaseModel):
     end_at = Column(DateTime, nullable=True)
 
     booking = relationship("Bookings", back_populates="booking_services")
+
+
+
+class CompanyNotifications(BaseModel):
+    __tablename__ = "company_notifications"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    type = Column(SQLAlchemyEnum(NotificationType), nullable=False)
+    status = Column(SQLAlchemyEnum(NotificationStatus), default=NotificationStatus.UNREAD)
+    message = Column(Text, nullable=False)
+    data = Column(LargeBinary, nullable=True)  # JSON or additional data
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+

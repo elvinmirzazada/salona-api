@@ -3,7 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict, UUID4
 
 from app.models import CustomerStatusType, CompanyCategories
-from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType, EmailStatusType, PhoneStatusType
+from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType, EmailStatusType, PhoneStatusType, NotificationType, NotificationStatus
 
 
 # Base schemas
@@ -343,3 +343,24 @@ class CompanyPhone(CompanyPhoneBase, TimestampedModel):
 
     id: UUID4
     company_id: UUID4
+
+
+class NotificationBase(BaseModel):
+    type: NotificationType
+    message: str
+    data: Optional[str]
+    status: NotificationStatus = NotificationStatus.UNREAD
+    created_at: datetime = datetime.now()
+
+class NotificationCreate(NotificationBase):
+    company_id: Optional[UUID4] = None
+
+class NotificationUpdate(BaseModel):
+    status: Optional[NotificationStatus] = None
+
+class Notification(NotificationBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    company_id: UUID4
+

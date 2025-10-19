@@ -43,3 +43,25 @@ class ErrorResponse(BaseResponse):
             error_code=error_code,
             details=details
         )
+
+
+class PaginationInfo(BaseModel):
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+
+
+class PaginatedResponse(BaseResponse, Generic[T]):
+    data: Optional[T] = None
+    pagination: Optional[PaginationInfo] = None
+
+    @classmethod
+    def success_response(cls, data: Optional[T] = None, pagination: Optional[PaginationInfo] = None, message: str = "Success", status_code: int = status.HTTP_200_OK) -> "PaginatedResponse[T]":
+        return cls(
+            success=True,
+            message=message,
+            status_code=status_code,
+            data=data,
+            pagination=pagination
+        )
