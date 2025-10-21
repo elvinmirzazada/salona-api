@@ -6,7 +6,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.schemas import User
+from app.core.redis_client import publish_event
+from app.schemas import CompanyNotificationCreate
+from app.services.notification_service import notification_service
 from app.schemas.schemas import Booking, BookingCreate, BookingUpdate, AvailabilityResponse, CustomerCreate
 from app.services.crud import booking as crud_booking
 from app.services.crud import service as crud_service
@@ -16,7 +18,7 @@ from app.services.crud import customer as crud_customer
 from app.api.dependencies import get_current_company_id, get_token_payload
 from app.schemas.responses import DataResponse
 from app.api.dependencies import get_current_customer
-from app.models import BookingServices, BookingStatus
+from app.models import BookingServices, BookingStatus, NotificationType
 
 from app.services.auth import verify_token
 import uuid
@@ -44,7 +46,8 @@ async def create_booking(
     # if credentials:
     #     customer = get_current_customer(credentials=credentials, db=db)
 
-    print(booking_in.__dict__)
+    publish_event('booking_created',
+                  str({'info': f"TEST"}))
 
     # If no valid customer found, create a new inactive one
     if not customer:
@@ -126,6 +129,17 @@ async def create_booking(
     try:
         booking = crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
         response.status_code = status.HTTP_201_CREATED
+        publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
+
+        # Create confirmation notification for the assigned staff member
+        res = notification_service.create_notification(
+            db=db,
+            notification_request=CompanyNotificationCreate(
+                company_id=booking_in.company_id,
+                type=NotificationType.BOOKING_CREATED,
+                message=f"A new booking has been created by {customer.first_name} {customer.last_name}"
+            )
+        )
         db.commit()
         return DataResponse.success_response(
             message="",
@@ -312,6 +326,17 @@ async def create_booking_by_user(
     try:
         booking = crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
         response.status_code = status.HTTP_201_CREATED
+        await publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
+
+        # Create confirmation notification for the assigned staff member
+        res = notification_service.create_notification(
+            db=db,
+            notification_request=CompanyNotificationCreate(
+                company_id=booking_in.company_id,
+                type=NotificationType.BOOKING_CREATED,
+                message=f"A new booking has been created by {customer.first_name} {customer.last_name}"
+            )
+        )
         db.commit()
         return DataResponse.success_response(
             message="",

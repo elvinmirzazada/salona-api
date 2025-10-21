@@ -54,8 +54,37 @@ def root():
 
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-CHANNEL = os.getenv("REDIS_CHANNEL", "dev")
+CHANNELS = os.getenv("REDIS_CHANNELS", "dev,booking_created").split(",")
 
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
+
+async def redis_subscriber(websocket: WebSocket, channels: list[str]):
+    pubsub = redis_client.pubsub()
+    # Unpack the list when subscribing
+    await pubsub.subscribe(*channels)
+    try:
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                await websocket.send_text(f"{message['data']}")
+    except Exception as e:
+        print("Subscriber error:", e)
+    finally:
+        await pubsub.unsubscribe(*channels)
+        await pubsub.close()
+        await websocket.close()
+
+# @app.websocket("/live-ws")
+# async def websocket_endpoint(websocket: WebSocket):
+#     await websocket.accept()
+#     # Pass your list of channels
+#     try:
+#         await redis_subscriber(websocket, CHANNELS)
+#     except Exception as e:
+#         print("WebSocket closed:", e)
+#     finally:
+#         await websocket.close()
+#
 @app.websocket("/live-ws")
 async def websocket_test(websocket: WebSocket):
     await websocket.accept()
@@ -63,8 +92,8 @@ async def websocket_test(websocket: WebSocket):
         try:
             r = redis.from_url(REDIS_URL, decode_responses=True)
             pubsub = r.pubsub()
-            await pubsub.subscribe(CHANNEL)
-            print(f"Subscribed to Redis channel: {CHANNEL}")
+            await pubsub.subscribe(*CHANNELS)
+            print(f"Subscribed to Redis channel: {CHANNELS}")
 
             async for message in pubsub.listen():
                 if message["type"] == "message":
@@ -76,7 +105,7 @@ async def websocket_test(websocket: WebSocket):
             print(f"WebSocket error: {str(e)}")
         finally:
             try:
-                await pubsub.unsubscribe(CHANNEL)
+                await pubsub.unsubscribe(*CHANNELS)
                 await pubsub.close()
                 await r.close()
                 print("Redis connection closed")

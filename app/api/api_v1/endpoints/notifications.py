@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import UUID4
 
 from app.db.session import get_db
-from app.schemas.schemas import Notification, NotificationCreate, NotificationUpdate
+from app.schemas.schemas import Notification, CompanyNotificationCreate, NotificationUpdate
 from app.schemas.responses import DataResponse, PaginatedResponse
 from app.services.crud import notification as crud_notification
 from app.api.dependencies import get_current_user, get_current_company_id
@@ -213,13 +213,13 @@ async def create_notification(
     *,
     db: Session = Depends(get_db),
     company_id = Depends(get_current_company_id),
-    notification_in: NotificationCreate
+    notification_in: CompanyNotificationCreate
 ) -> DataResponse[Notification]:
     """
     Create a new notification (for admin/system use)
     """
     notification_in.company_id = company_id
-    notification = crud_notification.create_notification(db=db, notification=notification_in)
+    notification = crud_notification.create_company_notification(db=db, notification=notification_in)
     
     return DataResponse.success_response(
         data=notification,

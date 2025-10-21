@@ -4,11 +4,11 @@ from sqlalchemy import and_, func
 from pydantic import UUID4
 
 from app.models.models import CompanyNotifications
-from app.schemas.schemas import NotificationCreate, NotificationUpdate, Notification
+from app.schemas import NotificationCreate, NotificationUpdate, Notification
 from app.schemas.responses import PaginationInfo
 
 
-def create_notification(db: Session, notification: NotificationCreate) -> Notification:
+def create_company_notification(db: Session, notification: NotificationCreate) -> Notification:
     """Create a new notification"""
     db_notification = CompanyNotifications(**notification.model_dump())
     db.add(db_notification)

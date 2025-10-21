@@ -348,12 +348,18 @@ class CompanyPhone(CompanyPhoneBase, TimestampedModel):
 class NotificationBase(BaseModel):
     type: NotificationType
     message: str
-    data: Optional[str]
+    data: Optional[str] = None
     status: NotificationStatus = NotificationStatus.UNREAD
     created_at: datetime = datetime.now()
 
+
 class NotificationCreate(NotificationBase):
+    pass
+
+
+class CompanyNotificationCreate(NotificationCreate):
     company_id: Optional[UUID4] = None
+
 
 class NotificationUpdate(BaseModel):
     status: Optional[NotificationStatus] = None
