@@ -39,5 +39,5 @@ class Settings(BaseSettings):
             POSTGRES_DB=os.getenv("POSTGRES_DB"),
         )
 
-settings = Settings()
+settings = Settings.from_railway()
 # settings.DATABASE_URL = settings._build_database_url()
