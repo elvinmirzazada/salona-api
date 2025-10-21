@@ -13,9 +13,9 @@ class Settings(BaseSettings):
     POSTGRES_DB: str
     DATABASE_URL: Optional[str] = None
     SECRET_KEY: Optional[str] = None
-
-    class Config:
-        env_file = ".env"
+    #
+    # class Config:
+    #     env_file = ".env"
 
     def _build_database_url(self) -> str:
         return f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}/{self.POSTGRES_DB}"
