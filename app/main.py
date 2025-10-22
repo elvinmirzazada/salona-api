@@ -32,16 +32,11 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=['*'],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=[
-        "Authorization",
-        "Content-Type",
-        "Accept",
-        "Origin",
-        "X-Requested-With",
-        "X-CSRFToken"  # Added CSRF token header
+        "*"  # Added CSRF token header
     ],
     expose_headers=["*"],
     max_age=600  # Cache preflight requests for 10 minutes
