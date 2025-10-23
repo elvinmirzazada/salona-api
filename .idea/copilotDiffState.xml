@@ -3,15 +3,6 @@
   <component name="CopilotDiffPersistence">
     <option name="pendingDiffs">
       <map>
-        <entry key="$PROJECT_DIR$/app/core/redis_client.py">
-          <value>
-            <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/app/core/redis_client.py" />
-              <option name="originalContent" value="import redis&#10;import os&#10;&#10;REDIS_URL = os.getenv(&quot;REDIS_URL&quot;, &quot;redis://localhost:6379/0&quot;)&#10;&#10;redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)&#10;&#10;def publish_event(channel: str, message: str):&#10;    &quot;&quot;&quot;Publish a message to a Redis channel.&quot;&quot;&quot;&#10;    redis_client.publish(channel, message)&#10;" />
-              <option name="updatedContent" value="import redis&#10;import os&#10;&#10;REDIS_URL = os.getenv(&quot;REDIS_URL&quot;, &quot;redis://localhost:6379/0&quot;)&#10;&#10;redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)&#10;&#10;def publish_event(channel: str, message: str):&#10;    &quot;&quot;&quot;Publish a message to a Redis channel.&quot;&quot;&quot;&#10;    redis_client.publish(channel, message)&#10;" />
-            </PendingDiffInfo>
-          </value>
-        </entry>
         <entry key="$PROJECT_DIR$/app/models/enums.py">
           <value>
             <PendingDiffInfo>

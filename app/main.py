@@ -26,15 +26,16 @@ origins = [
     "http://localhost:3001",
     "http://localhost:8010",
     "http://127.0.0.1:8010",
+    "http://0.0.0.0:8010",
     "http://salona.me",
     "http://www.salona.me",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=[
         "*"  # Added CSRF token header
     ],
