@@ -57,7 +57,7 @@ def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[timedelta
     return encoded_jwt
 
 
-def create_token_pair(id: int, email: str, actor: str, ver: str = '1', company_id: Optional[str] = None) -> Dict[str, str]:
+def create_token_pair(id: int, email: str, actor: str, ver: str = '1', company_id: Optional[str] = None) -> Dict:
     """Create both access and refresh tokens."""
     data = {"sub": str(id), "email": email, "actor": actor, "ver": ver, 'company_id': company_id}
     access_token = create_access_token(data)

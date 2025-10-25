@@ -1,9 +1,9 @@
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, Request
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from app.api.dependencies import get_current_active_user, get_current_company_id
 from app.db.session import get_db
@@ -13,7 +13,7 @@ from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.responses import DataResponse
 from app.schemas.schemas import ResponseMessage, TimeOffCreate, TimeOff, TimeOffUpdate
 from app.schemas.schemas import UserCreate
-from app.services.auth import hash_password, verify_password, create_token_pair
+from app.services.auth import hash_password, verify_password, create_token_pair, verify_token
 from app.services.crud import user as crud_user
 from app.services.crud import user_time_off as crud_time_off
 
@@ -80,8 +80,17 @@ async def user_login(
         value=tokens["refresh_token"],
         httponly=True,
         secure=True,  # only over HTTPS
-        samesite="strict"
+        samesite="none"
     )
+    response.set_cookie(
+        key="access_token",
+        value=tokens["access_token"],
+        max_age=tokens['expires_in'],
+        httponly=True,
+        secure=True,  # only over HTTPS
+        samesite="none"
+    )
+
     print(tokens)
     return DataResponse.success_response(data = TokenResponse(**tokens))
 
@@ -93,6 +102,7 @@ async def logout_user(response: Response):
     """
     try:
         response.delete_cookie(key="refresh_token")
+        response.delete_cookie(key="access_token")
         return ResponseMessage(message="Logged out successfully", status="success")
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -316,3 +326,120 @@ async def delete_time_off(
         message="Time off deleted successfully",
         status_code=status.HTTP_200_OK
     )
+
+
+@router.post("/auth/refresh-token", response_model=DataResponse[TokenResponse])
+async def refresh_token(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db)
+) -> DataResponse:
+    """
+    Refresh access and refresh tokens using the refresh token cookie.
+    """
+    try:
+        # Get the refresh token from the request cookies
+        refresh_token = request.cookies.get("refresh_token")
+        if not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token not found"
+            )
+
+        # Verify and decode the refresh token
+        payload = verify_token(refresh_token, "refresh")
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+
+        # Extract user data from payload
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        company_id = payload.get("company_id")
+
+        if not user_id or not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload"
+            )
+
+        # Create new tokens
+        new_tokens = create_token_pair(
+            id=int(user_id),
+            email=email,
+            actor="user",
+            ver="1",
+            company_id=company_id
+        )
+
+        # Set new cookies
+        response.set_cookie(
+            key="refresh_token",
+            value=new_tokens["refresh_token"],
+            httponly=True,
+            secure=True,
+            samesite="strict"
+        )
+        response.set_cookie(
+            key="access_token",
+            value=new_tokens["access_token"],
+            max_age=new_tokens['expires_in'],
+            httponly=True,
+            secure=True,
+            samesite="strict"
+        )
+
+        return DataResponse.success_response(data=TokenResponse(**new_tokens))
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to refresh token: {str(e)}"
+        )
+
+
+@router.post("/auth/verify-token", response_model=DataResponse[dict])
+async def verify_access_token(
+    request: Request,
+    response: Response
+) -> DataResponse:
+    """
+    Verify the access token and return the token data.
+    """
+    try:
+        # Get the access token from the request cookies
+        access_token = request.cookies.get("access_token")
+        if not access_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Access token not found"
+            )
+
+        # Verify and decode the access token
+        payload = verify_token(access_token, "access")
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired access token"
+            )
+
+        # Return token validity info
+        return DataResponse.success_response(data={
+            "valid": True,
+            "user_id": payload.get("sub"),
+            "email": payload.get("email"),
+            "company_id": payload.get("company_id"),
+            "expires_at": payload.get("exp")
+        })
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify token: {str(e)}"
+        )
