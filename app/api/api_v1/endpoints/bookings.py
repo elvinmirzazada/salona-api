@@ -187,8 +187,8 @@ async def get_all_bookings(
         *,
         db: Session = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
-        start_date: Optional[date] = Query(None, description="Start date in YYYY-MM-DD format"),
-        end_date: Optional[date] = Query(None, description="End date in YYYY-MM-DD format")
+        start_date: Optional[datetime] = Query(None, description="Start date in YYYY-MM-DD format"),
+        end_date: Optional[datetime] = Query(None, description="End date in YYYY-MM-DD format")
 ) -> DataResponse:
     """
     Get bookings with details for a company within a date range.

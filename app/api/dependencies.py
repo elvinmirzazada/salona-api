@@ -20,9 +20,7 @@ async def get_current_user(
     
     try:
         # Extract access token from HTTP-only cookie
-        print(request.cookies)
         access_token = request.cookies.get("access_token")
-        print(access_token)
         if not access_token:
             raise credentials_exception
 
@@ -35,10 +33,10 @@ async def get_current_user(
         raise credentials_exception
     
     # Get user from database
-    user = crud_user.get(db, id=user_id)
+    user, company_id = crud_user.get(db, id=user_id)
     if user is None:
         raise credentials_exception
-        
+    user.company_id = company_id
     return user
 
 

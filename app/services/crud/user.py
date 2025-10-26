@@ -13,7 +13,7 @@ from app.schemas.schemas import (
 
 
 def get(db: Session, id: UUID4) -> Optional[Users]:
-    return db.query(Users).filter(Users.id == id).first()
+    return db.query(Users, CompanyUsers.company_id).join(CompanyUsers, CompanyUsers.user_id == Users.id).filter(Users.id == id).first()
 
 
 def get_all(db: Session) -> List[Users]:

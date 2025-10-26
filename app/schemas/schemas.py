@@ -37,6 +37,7 @@ class User(UserBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
     
     id: UUID4
+    company_id: Optional[UUID4] = None
     status: CustomerStatusType
 
 
