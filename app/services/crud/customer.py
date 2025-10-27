@@ -57,5 +57,5 @@ def verify_token(db: Session, db_obj: CustomerVerifications) -> CustomerVerifica
 def get_company_customers(db: Session, company_id: str) -> List[Customers]:
     """Get all customers belonging to the given company."""
     return list(db.query(Customers).join(Bookings, Customers.id==Bookings.customer_id)
-                .filter(Bookings.company_id == company_id, Customers.status=='active', Customers.email_verified==True).all())
+                .filter(Bookings.company_id == company_id).all())
 
