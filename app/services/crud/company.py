@@ -23,6 +23,11 @@ def get_company_users(db: Session, company_id: str) -> List[CompanyUsers]:
     return list(db.query(CompanyUsers).filter(CompanyUsers.company_id == company_id).all())
 
 
+def get_company_user(db: Session, company_id: str, user_id: str) -> CompanyUsers:
+    """Get all users belonging to the given company."""
+    return db.query(CompanyUsers).filter(CompanyUsers.company_id == company_id, CompanyUsers.user_id == user_id).first()
+
+
 def get_company_services(db: Session, company_id: str) -> List[CompanyCategories]:
     """Get all services belonging to the given company."""
     return list(db.query(CompanyCategories).join(CategoryServices, CategoryServices.category_id==CompanyCategories.id)

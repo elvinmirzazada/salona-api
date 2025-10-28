@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timedelta
 
-from app.api.dependencies import get_current_active_user, get_current_company_id
+from app.api.dependencies import get_current_active_user, get_current_company_id, get_current_company_user
 from app.db.session import get_db
 from app.models import AvailabilityType
-from app.schemas import User
+from app.schemas import User, CompanyUser
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.responses import DataResponse
 from app.schemas.schemas import ResponseMessage, TimeOffCreate, TimeOff, TimeOffUpdate
@@ -109,10 +109,10 @@ async def logout_user(response: Response):
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
 
 
-@router.get("/me", response_model=DataResponse[User])
+@router.get("/me", response_model=DataResponse[CompanyUser])
 async def get_current_user(
     *,
-    current_user: User = Depends(get_current_active_user)
+    current_user: CompanyUser = Depends(get_current_company_user)
 ) -> DataResponse:
     """
     Get current logged-in user.

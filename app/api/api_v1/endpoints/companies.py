@@ -2,9 +2,18 @@ from typing import List
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from sqlalchemy.orm import Session
-from app.api.dependencies import get_current_active_user, get_current_active_customer, get_current_company_id
+from app.api.dependencies import (
+    get_current_active_user,
+    get_current_active_customer,
+    get_current_company_id,
+    require_admin_or_owner,
+    require_owner,
+    require_staff_or_higher,
+    get_current_user_role
+)
 from app.db.session import get_db
 from app.models.models import Users
+from app.models.enums import CompanyRoleType
 from app.schemas import CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, \
     CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate, \
     CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone
@@ -232,9 +241,11 @@ async def get_company_all_users_availabilities(
 async def get_company_users(
         db: Session = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
+        user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can list staff
 ) -> DataResponse:
     """
-    Get all businesses owned by the authenticated professional.
+    Get all staff/users in the company.
+    Requires admin or owner role.
     """
     if not company_id:
         return DataResponse.error_response(
@@ -277,9 +288,11 @@ async def get_company_services(
 async def get_company_customers(
         db: Session = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
+        user_role: CompanyRoleType = Depends(require_staff_or_higher)  # Staff and above can view customers
 ) -> DataResponse:
     """
-    Get all customers who have bookings with the authenticated professional's company.
+    Get all customers who have bookings with the company.
+    Requires staff, admin, or owner role.
     """
     customers = crud_customer.get_company_customers(
         db=db, company_id=company_id
@@ -298,9 +311,11 @@ async def get_company_user_time_offs(
         company_id: str = Depends(get_current_company_id),
         availability_type: AvailabilityType = Query(..., description="Type of availability check: daily, weekly, or monthly"),
         date_from: date = Query(..., description="Start date for availability check"),
+        user_role: CompanyRoleType = Depends(require_staff_or_higher)
 ) -> DataResponse:
     """
-    Get all customers who have bookings with the authenticated professional's company.
+    Get all user time offs for the company.
+    Requires admin or owner role.
     """
     start_date = date_from
     end_date = date_from + timedelta(
@@ -316,8 +331,8 @@ async def get_company_user_time_offs(
         message="Company user time offs retrieved successfully",
         status_code=status.HTTP_200_OK
     )
-#
-#
+
+
 @router.get("", response_model=DataResponse[Company])
 async def get_company(
     *,
@@ -344,11 +359,12 @@ async def update_company(
     *,
     db: Session = Depends(get_db),
     company_in: CompanyUpdate,
-    company_id: str = Depends(get_current_company_id)
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can update company
 ) -> DataResponse:
     """
     Update company information.
-    Only users with appropriate permissions can update the company details.
+    Requires admin or owner role.
     """
     company = crud_company.get(db=db, id=company_id)
     if not company:
@@ -380,10 +396,12 @@ async def add_company_email(
     *,
     db: Session = Depends(get_db),
     email_in: CompanyEmailCreate,
-    company_id: str = Depends(get_current_company_id)
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner
 ) -> DataResponse:
     """
     Add a new email address to the company.
+    Requires admin or owner role.
     """
     try:
         email_in.company_id = company_id
@@ -424,10 +442,12 @@ async def delete_company_email(
     *,
     db: Session = Depends(get_db),
     email_id: str,
-    company_id: str = Depends(get_current_company_id)
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner
 ) -> DataResponse:
     """
     Delete an email address from the company.
+    Requires admin or owner role.
     """
     success = crud_company.delete_company_email(db=db, email_id=email_id, company_id=company_id)
 
@@ -448,10 +468,12 @@ async def add_company_phone(
     *,
     db: Session = Depends(get_db),
     phone_in: CompanyPhoneCreate,
-    company_id: str = Depends(get_current_company_id)
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner
 ) -> DataResponse:
     """
     Add new phone numbers to the company.
+    Requires admin or owner role.
     """
     try:
         # Set the company ID from the authenticated user's context
@@ -494,10 +516,12 @@ async def delete_company_phone(
     *,
     db: Session = Depends(get_db),
     phone_id: str,
-    company_id: str = Depends(get_current_company_id)
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner
 ) -> DataResponse:
     """
     Delete a phone number from the company.
+    Requires admin or owner role.
     """
     success = crud_company.delete_company_phone(db=db, phone_id=phone_id, company_id=company_id)
 
