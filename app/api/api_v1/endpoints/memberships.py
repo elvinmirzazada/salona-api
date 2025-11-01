@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.testing.suite.test_reflection import metadata
 
 from app.db.session import get_db
+from app.models import CompanyMemberships
+from app.schemas import CompanyMembership
 from app.schemas.responses import DataResponse
 from app.schemas.membership import MembershipPlan, CompanyMembershipCreate
 from app.services.crud import membership as crud_membership
@@ -35,6 +37,25 @@ async def list_membership_plans(
     return DataResponse.success_response(
         data=plans,
         message="Membership plans fetched successfully"
+    )
+
+
+@router.get("/active-plan", response_model=DataResponse[CompanyMembership])
+async def get_active_membership_plan(
+    *,
+    db: Session = Depends(get_db),
+    # Only owners and admins can list plans
+    _role = Depends(require_admin_or_owner),
+    company_id=Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    List membership plans. Requires admin or owner.
+    """
+    plan = crud_membership.company_membership.get_active_membership(db, company_id=company_id)
+
+    return DataResponse.success_response(
+        data=plan,
+        message="Active Membership plan fetched successfully"
     )
 
 
@@ -131,8 +152,8 @@ async def webhook_subscription(request: Request,
 
 
 @router.get('/webhook')
-async def redirect_webhook():
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/users/dashboard")
+async def redirect_webhook(request: Request):
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/users/close-tab")
 
 
 @router.get("/cancel")
