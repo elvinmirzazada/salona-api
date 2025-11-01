@@ -95,13 +95,12 @@ async def webhook_subscription(request: Request,
                 sig_header=signature,
                 secret=endpoint_secret
             )
-            print("1 event: ", event)
+            print("Webhook signature verification succeeded")
         except stripe.error.SignatureVerificationError as e:
             print("⚠️  Webhook signature verification failed:", e)
             return JSONResponse(content={"success": False}, status_code=400)
     else:
         event = await request.json()
-        print("2 event: ", event)
 
     print(f'event_type: {event["type"]}')
     # Handle different event types
@@ -116,12 +115,13 @@ async def webhook_subscription(request: Request,
             return JSONResponse(content={"success": False})
 
         # Create or renew membership
-        if payment_intent.get('payment_status', '') == 'paid':
+        if payment_intent.get('payment_status', '') == 'paid' and payment_intent.get('mode', '') == 'subscription':
+
             crud_membership.company_membership.create(
                 db,
-                company_id=payment_intent['company_id'],
+                company_id=payment_intent.get('metadata', {})['company_id'],
                 obj_in=CompanyMembershipCreate(
-                    membership_plan_id=payment_intent['plan_id'],
+                    membership_plan_id=payment_intent.get('metadata', {})['plan_id'],
                     auto_renew=True
                 )
             )
