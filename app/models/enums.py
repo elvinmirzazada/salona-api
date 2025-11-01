@@ -91,3 +91,9 @@ class NotificationStatus(str, Enum):
     UNREAD = "unread"
     READ = "read"
     ARCHIVED = "archived"
+
+
+class MembershipPlanType(str, Enum):
+    standard = "standard"
+    premium = "premium"
+    vip = "vip"

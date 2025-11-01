@@ -3,15 +3,16 @@ import uuid
 from pydantic.v1 import create_model_from_typeddict
 from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID,
                         Time,
-                        CheckConstraint, false, BLOB, LargeBinary)
+                        CheckConstraint, false, BLOB, LargeBinary, Index)
 from sqlalchemy.dialects.postgresql import ENUM as SQLAlchemyEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.sql import expression
 
 from app.db.base_class import BaseModel
 from app.models.enums import (StatusType, BookingStatus, CustomerStatusType, EmailStatusType,
                               PhoneStatusType, VerificationType, VerificationStatus,
-                              CompanyRoleType, NotificationType, NotificationStatus)
+                              CompanyRoleType, NotificationType, NotificationStatus, MembershipPlanType)
 
 
 #
@@ -275,4 +276,47 @@ class CompanyNotifications(BaseModel):
     data = Column(LargeBinary, nullable=True)  # JSON or additional data
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class MembershipPlans(BaseModel):
+    __tablename__ = "membership_plans"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, unique=True)
+    plan_type = Column(SQLAlchemyEnum(MembershipPlanType), nullable=False, unique=True)
+    description = Column(Text)
+    url = Column(Text)
+    price = Column(Integer, nullable=False)  # Price in cents
+    duration_days = Column(Integer, nullable=False, default=30)  # Subscription duration
+    status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    subscriptions = relationship("CompanyMemberships", back_populates="membership_plan")
+
+
+class CompanyMemberships(BaseModel):
+    __tablename__ = "company_memberships"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    membership_plan_id = Column(UUID, ForeignKey("membership_plans.id", ondelete="CASCADE"), nullable=False)
+    status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
+    start_date = Column(DateTime, nullable=False, default=func.now())
+    end_date = Column(DateTime, nullable=False)
+    auto_renew = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    membership_plan = relationship("MembershipPlans", back_populates="subscriptions")
+
+    __table_args__ = (
+        # Ensure a company can only have one active membership at a time
+        Index(
+            'unique_active_company_membership',
+            'company_id',
+            unique=True,
+            postgresql_where=(expression.text("status = 'active'"))
+        ),
+    )
 

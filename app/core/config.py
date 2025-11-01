@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
     SECRET_KEY: Optional[str] = None
     REDIS_URL: Optional[str] = None
+    STRIPE_WEBHOOK_SECRET: Optional[str] = None
+    STRIPE_API_KEY: Optional[str] = None
+    API_URL: str = "https://api.salona.me"
 
     class Config:
         env_file = ".env"  # only used locally if no system env vars are set
