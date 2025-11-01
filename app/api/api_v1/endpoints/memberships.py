@@ -75,7 +75,8 @@ async def create_checkout_session(membership_plan_id: str,
 
 
 @router.post("/webhook/subscription")
-async def webhook(request: Request):
+async def webhook(request: Request,
+                  db: Session = Depends(get_db), ):
     try:
         payload = await request.body()
     except Exception as e:
@@ -107,27 +108,27 @@ async def webhook(request: Request):
     print(data_object)
     print(event_type)
     # Handle different event types
-    # if event["type"] == "checkout.session.completed":
-    #     payment_intent = event["data"]["object"]
-    #     print(payment_intent)
-    #     print(f"💰 Payment for {payment_intent['amount']} succeeded.")
-    #     # handle_payment_intent_succeeded(payment_intent)
-    #     if not payment_intent.get('plan_id', None):
-    #         return JSONResponse(content={"success": False})
-    #     if not payment_intent.get('company_id', None):
-    #         return JSONResponse(content={"success": False})
-    #
-    #     # Create or renew membership
-    #     crud_membership.company_membership.create(
-    #         db,
-    #         company_id=payment_intent['company_id'],
-    #         obj_in=CompanyMembershipCreate(
-    #             membership_plan_id=payment_intent['plan_id'],
-    #             auto_renew=True
-    #         )
-    #     )
-    # else:
-    #     print(f"Unhandled event type {event['type']}")
+    if event["type"] == "checkout.session.completed":
+        payment_intent = event["data"]["object"]
+        print(payment_intent)
+        print(f"💰 Payment for {payment_intent['amount']} succeeded.")
+        # handle_payment_intent_succeeded(payment_intent)
+        if not payment_intent.get('plan_id', None):
+            return JSONResponse(content={"success": False})
+        if not payment_intent.get('company_id', None):
+            return JSONResponse(content={"success": False})
+
+        # Create or renew membership
+        crud_membership.company_membership.create(
+            db,
+            company_id=payment_intent['company_id'],
+            obj_in=CompanyMembershipCreate(
+                membership_plan_id=payment_intent['plan_id'],
+                auto_renew=True
+            )
+        )
+    else:
+        print(f"Unhandled event type {event['type']}")
 
     return JSONResponse(content={"success": True})
 
