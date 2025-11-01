@@ -74,7 +74,7 @@ async def create_checkout_session(membership_plan_id: str,
 
 
 
-@router.post("/webhook")
+@router.post("/webhook/subscription")
 async def webhook(request: Request):
     try:
         payload = await request.body()
