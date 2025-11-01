@@ -1,6 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Header, status, Response, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.testing.suite.test_reflection import metadata
 
@@ -85,7 +85,6 @@ async def webhook_subscription(request: Request,
         raise HTTPException(status_code=400, detail="Invalid payload")
 
     signature = request.headers.get("stripe-signature")
-    print("signature: ", signature)
 
     # Verify Stripe signature if secret is set
     if endpoint_secret:
@@ -102,11 +101,9 @@ async def webhook_subscription(request: Request,
     else:
         event = await request.json()
 
-    print(f'event_type: {event["type"]}')
     # Handle different event types
     if event["type"] == "checkout.session.completed":
         payment_intent = event["data"]["object"]
-        print(f"payment_intent: {payment_intent}")
         print(f"💰 Payment for {payment_intent['amount_total']} succeeded.")
         # handle_payment_intent_succeeded(payment_intent)
         if not payment_intent.get('metadata', {}).get('plan_id', None):
@@ -131,6 +128,11 @@ async def webhook_subscription(request: Request,
         print(f"Unhandled event type {event['type']}")
 
     return JSONResponse(content={"success": True})
+
+
+@router.get('/webhook')
+async def redirect_webhook():
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/users/dashboard")
 
 
 @router.get("/cancel")
