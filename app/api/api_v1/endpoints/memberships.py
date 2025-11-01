@@ -75,8 +75,8 @@ async def create_checkout_session(membership_plan_id: str,
 
 
 @router.post("/webhook/subscription")
-async def webhook(request: Request,
-                  db: Session = Depends(get_db), ):
+async def webhook_subscription(request: Request,
+                               db: Session = Depends(get_db), ):
     try:
         payload = await request.body()
     except Exception as e:
