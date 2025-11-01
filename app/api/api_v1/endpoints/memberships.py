@@ -58,6 +58,7 @@ async def create_checkout_session(membership_plan_id: str,
             }],
             success_url=f"{settings.API_URL}/api/v1/memberships/webhook",
             cancel_url=f"{settings.API_URL}/api/v1/memberships/cancel",
+            ui_mode="hosted",
             subscription_data={
                 'billing_mode': {
                     'type': 'flexible'
@@ -84,7 +85,7 @@ async def webhook_subscription(request: Request,
         raise HTTPException(status_code=400, detail="Invalid payload")
 
     signature = request.headers.get("stripe-signature")
-    print(payload)
+    print("signature: ", signature)
 
     # Verify Stripe signature if secret is set
     if endpoint_secret:
@@ -94,39 +95,38 @@ async def webhook_subscription(request: Request,
                 sig_header=signature,
                 secret=endpoint_secret
             )
-            data = event["data"]
-            event_type = event["type"]
+            print("1 event: ", event)
         except stripe.error.SignatureVerificationError as e:
             print("⚠️  Webhook signature verification failed:", e)
             return JSONResponse(content={"success": False}, status_code=400)
     else:
         event = await request.json()
-        data = event["data"]
-        event_type = event["type"]
+        print("2 event: ", event)
 
-    data_object = data["object"]
-    print(data_object)
-    print(event_type)
+    print(f'event_type: {event["type"]}')
     # Handle different event types
     if event["type"] == "checkout.session.completed":
         payment_intent = event["data"]["object"]
-        print(payment_intent)
-        print(f"💰 Payment for {payment_intent['amount']} succeeded.")
+        print(f"payment_intent: {payment_intent}")
+        print(f"💰 Payment for {payment_intent['amount_total']} succeeded.")
         # handle_payment_intent_succeeded(payment_intent)
-        if not payment_intent.get('plan_id', None):
+        if not payment_intent.get('metadata', {}).get('plan_id', None):
             return JSONResponse(content={"success": False})
-        if not payment_intent.get('company_id', None):
+        if not payment_intent.get('metadata', {}).get('company_id', None):
             return JSONResponse(content={"success": False})
 
         # Create or renew membership
-        crud_membership.company_membership.create(
-            db,
-            company_id=payment_intent['company_id'],
-            obj_in=CompanyMembershipCreate(
-                membership_plan_id=payment_intent['plan_id'],
-                auto_renew=True
+        if payment_intent.get('payment_status', '') == 'paid':
+            crud_membership.company_membership.create(
+                db,
+                company_id=payment_intent['company_id'],
+                obj_in=CompanyMembershipCreate(
+                    membership_plan_id=payment_intent['plan_id'],
+                    auto_renew=True
+                )
             )
-        )
+        else:
+            return JSONResponse(content={"success": False})
     else:
         print(f"Unhandled event type {event['type']}")
 
