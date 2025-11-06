@@ -9,13 +9,15 @@ from app.api.dependencies import get_current_active_user, get_current_company_id
 from app.db.session import get_db
 from app.models import AvailabilityType
 from app.schemas import User, CompanyUser
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, TokenResponse, VerificationRequest
 from app.schemas.responses import DataResponse
 from app.schemas.schemas import ResponseMessage, TimeOffCreate, TimeOff, TimeOffUpdate
 from app.schemas.schemas import UserCreate
 from app.services.auth import hash_password, verify_password, create_token_pair, verify_token
 from app.services.crud import user as crud_user
 from app.services.crud import user_time_off as crud_time_off
+from app.services.email_service import email_service, create_verification_token
+from app.models.enums import VerificationType, VerificationStatus
 
 router = APIRouter()
 
@@ -27,25 +29,100 @@ async def create_user(
     user_in: UserCreate
 ) -> ResponseMessage:
     """
-    Register a new user.
+    Register a new user and send email verification.
     """
 
     try:
-        existing_customer = crud_user.get_by_email(
+        existing_user = crud_user.get_by_email(
             db=db,
             email=user_in.email
         )
-        if existing_customer:
+        if existing_user:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return ResponseMessage(message="User with this email already exists for this business", status="error")
+            return ResponseMessage(message="User with this email already exists", status="error")
 
         user_in.password = hash_password(user_in.password)
-        crud_user.create(db=db, obj_in=user_in)
+        new_user = crud_user.create(db=db, obj_in=user_in)
+
+        # Create verification token
+        verification_record = create_verification_token(
+            db=db,
+            entity_id=new_user.id,
+            verification_type=VerificationType.EMAIL,
+            entity_type="user",
+            expires_in_hours=24
+        )
+
+        # Send verification email
+        user_name = f"{new_user.first_name} {new_user.last_name}"
+        email_sent = email_service.send_verification_email(
+            to_email=new_user.email,
+            verification_token=verification_record.token,
+            user_name=user_name
+        )
+
+        if not email_sent:
+            print(f"Warning: Failed to send verification email to {new_user.email}")
+
         response.status_code = status.HTTP_201_CREATED
-        return ResponseMessage(message="User created successfully", status="success")
+        return ResponseMessage(
+            message="User created successfully. Please check your email to verify your account.",
+            status="success"
+        )
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
+
+
+@router.post("/auth/verify_email", response_model=DataResponse)
+async def verify_email(
+    *,
+    db: Session = Depends(get_db),
+    verification_in: VerificationRequest,
+    response: Response
+) -> DataResponse:
+    """
+    Verify user email with token.
+    """
+    try:
+        token = crud_user.get_verification_token(
+            db=db,
+            token=verification_in.token,
+            type=VerificationType.EMAIL
+        )
+
+        if not token:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Verification token not found"
+            )
+
+        if token.status != VerificationStatus.PENDING or token.expires_at < datetime.now():
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="Token has expired or is invalid"
+            )
+
+        result = crud_user.verify_token(db=db, db_obj=token)
+        if result:
+            return DataResponse.success_response(
+                message="Email verified successfully"
+            )
+
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            message="Email verification failed",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Verification process failed: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @router.post("/auth/login", response_model=DataResponse[TokenResponse])

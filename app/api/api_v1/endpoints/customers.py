@@ -48,56 +48,6 @@ async def create_customer(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-@router.post("/auth/verify_email", response_model=DataResponse)
-async def verify_email(
-    *,
-    db: Session = Depends(get_db),
-    verification_in: VerificationRequest,
-    response: Response
-) -> DataResponse:
-    """
-    Verify customer email with improved error handling.
-    """
-    try:
-        token = crud_customer.get_verification_token(
-            db=db,
-            token=verification_in.token,
-            type="email"
-        )
-
-        if not token:
-            response.status_code = status.HTTP_404_NOT_FOUND
-            return DataResponse.error_response(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Verification token not found"
-            )
-
-        if token.status != "pending" or token.expires_at < func.now():
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return DataResponse.error_response(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="Token has expired or is invalid"
-            )
-
-        result = crud_customer.verify_token(db=db, db_obj=token)
-        if result:
-            return DataResponse.success_response(
-                message="Email verified successfully"
-            )
-
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        return DataResponse.error_response(
-            message="Email verification failed",
-            status_code=status.HTTP_400_BAD_REQUEST
-        )
-
-    except Exception as e:
-        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return DataResponse.error_response(
-            message=f"Verification process failed: {str(e)}",
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
 @router.post("/auth/login", response_model=DataResponse[TokenResponse])
 async def customer_login(
         *,

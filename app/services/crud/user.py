@@ -1,11 +1,13 @@
 import uuid
 from typing import Optional, List
+from datetime import datetime
 
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 
-from app.models import CompanyUsers
-from app.models.models import (Users)
+from app.models import CompanyUsers, CustomerStatusType
+from app.models.models import Users, UserVerifications
+from app.models.enums import VerificationStatus
 from app.schemas import CompanyUser, User
 from app.schemas.schemas import (
     UserCreate
@@ -31,15 +33,38 @@ def create(db: Session, *, obj_in: UserCreate) -> Users:
     db.commit()
     db.refresh(db_obj)
     return db_obj
-#
-# def update(self, db: Session, *, db_obj: Professional, obj_in: ProfessionalUpdate) -> Professional:
-#     update_data = obj_in.model_dump(exclude_unset=True)
-#     for field, value in update_data.items():
-#         setattr(db_obj, field, value)
-#     db.add(db_obj)
-#     db.commit()
-#     db.refresh(db_obj)
-#     return db_obj
+
+
+def get_verification_token(db: Session, token: str, type: str) -> Optional[UserVerifications]:
+    """Get verification token by token string and type"""
+    return db.query(UserVerifications).filter(
+        UserVerifications.token == token,
+        UserVerifications.type == type
+    ).first()
+
+
+def verify_token(db: Session, db_obj: UserVerifications) -> bool:
+    """Mark verification token as verified and update user email_verified status"""
+    try:
+        db_obj.status = VerificationStatus.VERIFIED
+        db_obj.used_at = datetime.now()
+
+        # Update user's email_verified status
+        user = db.query(Users).filter(Users.id == db_obj.user_id).first()
+        if user:
+            user.email_verified = True
+            user.status = CustomerStatusType.active
+            db.add(user)
+
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return True
+    except Exception as e:
+        db.rollback()
+        print(f"Error verifying token: {str(e)}")
+        return False
+
 
 def get_company_users(db: Session, company_id: str) -> List[CompanyUser]:
     """

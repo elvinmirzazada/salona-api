@@ -3,7 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict, UUID4
 
 from app.models import CustomerStatusType, CompanyCategories
-from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType, EmailStatusType, PhoneStatusType, NotificationType, NotificationStatus
+from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType, EmailStatusType, PhoneStatusType, NotificationType, NotificationStatus, CompanyRoleType
 
 
 # Base schemas
@@ -370,4 +370,10 @@ class Notification(NotificationBase, TimestampedModel):
 
     id: UUID4
     company_id: UUID4
+
+
+class CompanyMemberCreate(BaseModel):
+    user: UserCreate
+    company_id: UUID4
+    role: CompanyRoleType
 

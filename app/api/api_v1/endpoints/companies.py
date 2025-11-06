@@ -16,7 +16,7 @@ from app.models.models import Users
 from app.models.enums import CompanyRoleType
 from app.schemas import CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, \
     CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate, \
-    CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone
+    CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate
 from app.schemas.responses import DataResponse
 from app.services.crud import company as crud_company
 from app.services.crud import customer as crud_customer
@@ -210,33 +210,6 @@ async def get_company_all_users_availabilities(
         )
 
 
-#
-# @router.post("/add-member", response_model=BusinessStaff, status_code=status.HTTP_201_CREATED)
-# async def add_business_member(
-#     *,
-#     db: Session = Depends(get_db),
-#     business_staff_in: BusinessStaffCreate,
-#     current_professional: Professional = Depends(get_current_active_professional)
-# ) -> BusinessStaff:
-#     """
-#     Add a new member to the business.
-#     """
-#     business = crud_business.business.get(db=db, id=business_staff_in.business_id)
-#     if not business:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail="Business not found"
-#         )
-#     if business.owner_id != current_professional.id:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Not enough permissions to add members to this business"
-#         )
-#     business_staff_in.professional_id = current_professional.id
-#     business_staff = crud_business.business_staff.create(db=db, obj_in=business_staff_in)
-#     return business_staff
-#
-#
 @router.get("/users", response_model=DataResponse[List[CompanyUser]])
 async def get_company_users(
         db: Session = Depends(get_db),
@@ -535,3 +508,77 @@ async def delete_company_phone(
         message="Phone number deleted successfully",
         status_code=status.HTTP_200_OK
     )
+@router.post("/members", response_model=DataResponse[CompanyUser], status_code=status.HTTP_201_CREATED)
+async def add_company_member(
+    *,
+    db: Session = Depends(get_db),
+    user_in: UserCreate,
+    role: CompanyRoleType = Query(..., description="Role to assign to the user in the company"),
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can add members
+) -> DataResponse:
+    """
+    Create a new user and add them to the company with a specified role.
+    If a user with the email already exists, they will be added to the company.
+    Requires admin or owner role.
+    """
+    try:
+        company_user = crud_company.create_company_member(
+            db=db,
+            user_in=user_in,
+            company_id=company_id,
+            role=role
+        )
+        return DataResponse.success_response(
+            data=company_user,
+            message="Member added to company successfully",
+            status_code=status.HTTP_201_CREATED
+        )
+    except ValueError as e:
+        return DataResponse.error_response(
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to add member to company: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+@router.post("/members", response_model=DataResponse[CompanyUser], status_code=status.HTTP_201_CREATED)
+async def add_company_member(
+    *,
+    db: Session = Depends(get_db),
+    user_in: UserCreate,
+    role: CompanyRoleType = Query(..., description="Role to assign to the user in the company"),
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can add members
+) -> DataResponse:
+    """
+    Create a new user and add them to the company with a specified role.
+    If a user with the email already exists, they will be added to the company.
+    Requires admin or owner role.
+    """
+    try:
+        company_user = crud_company.create_company_member(
+            db=db,
+            user_in=user_in,
+            company_id=company_id,
+            role=role
+        )
+        return DataResponse.success_response(
+            data=company_user,
+            message="Member added to company successfully",
+            status_code=status.HTTP_201_CREATED
+        )
+    except ValueError as e:
+        return DataResponse.error_response(
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to add member to company: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

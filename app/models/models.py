@@ -34,6 +34,19 @@ class Users(BaseModel):
     user_time_offs = relationship("UserTimeOffs", back_populates="user")
 
 
+class UserVerifications(BaseModel):
+    __tablename__ = "user_verifications"
+
+    id = Column(UUID, primary_key=True, index=True)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
+    token = Column(String(255), nullable=False, unique=True)
+    type = Column(SQLAlchemyEnum(VerificationType), nullable=False)
+    status = Column(SQLAlchemyEnum(VerificationStatus), default=VerificationStatus.PENDING)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    used_at = Column(DateTime, nullable=True)
+
+
 class UserAvailabilities(BaseModel):
     __tablename__ = "user_availabilities"
 
@@ -319,4 +332,3 @@ class CompanyMemberships(BaseModel):
             postgresql_where=(expression.text("status = 'active'"))
         ),
     )
-

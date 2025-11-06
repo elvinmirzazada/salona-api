@@ -10,7 +10,7 @@ from app.schemas import CompanyMembership
 from app.schemas.responses import DataResponse
 from app.schemas.membership import MembershipPlan, CompanyMembershipCreate
 from app.services.crud import membership as crud_membership
-from app.api.dependencies import require_admin_or_owner, get_current_company_id
+from app.api.dependencies import require_admin_or_owner, get_current_company_id, require_staff_or_higher
 from app.core.config import settings
 import stripe
 import json
@@ -44,8 +44,7 @@ async def list_membership_plans(
 async def get_active_membership_plan(
     *,
     db: Session = Depends(get_db),
-    # Only owners and admins can list plans
-    _role = Depends(require_admin_or_owner),
+    _role = Depends(require_staff_or_higher),
     company_id=Depends(get_current_company_id)
 ) -> DataResponse:
     """

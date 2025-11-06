@@ -5,13 +5,14 @@ from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 
 from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTimeOffs, CategoryServices, \
-    CompanyCategories, CompanyEmails, CompanyPhones
+    CompanyCategories, CompanyEmails, CompanyPhones, Users
 from app.models.models import CompanyUsers, Companies
-from app.schemas import CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate
+from app.schemas import CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, UserCreate
 from app.schemas.schemas import (
     CompanyCreate,
     User
 )
+from app.services.auth import hash_password
 
 
 def get(db: Session, id: str) -> Optional[Companies]:
@@ -264,3 +265,67 @@ def delete_company_phone(db: Session, phone_id: str, company_id: str) -> bool:
     db.delete(db_obj)
     db.commit()
     return True
+
+
+def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, role: CompanyRoleType) -> CompanyUsers:
+    """
+    Create a new user and add them to a company with the specified role.
+
+    Args:
+        db: Database session
+        user_in: User creation data
+        company_id: Company ID to add the user to
+        role: Role to assign to the user in the company
+
+    Returns:
+        CompanyUsers object with the user relationship
+    """
+    # Check if user with this email already exists
+    existing_user = db.query(Users).filter(Users.email == user_in.email).first()
+
+    if existing_user:
+        # Check if user is already part of this company
+        existing_company_user = db.query(CompanyUsers).filter(
+            CompanyUsers.user_id == existing_user.id,
+            CompanyUsers.company_id == company_id
+        ).first()
+
+        if existing_company_user:
+            raise ValueError("User is already a member of this company")
+
+        # Add existing user to the company
+        company_user = CompanyUsers(
+            user_id=existing_user.id,
+            company_id=company_id,
+            role=role,
+            status=StatusType.active
+        )
+        db.add(company_user)
+        db.commit()
+        db.refresh(company_user)
+        return company_user
+
+    # Create new user
+    user_data = user_in.model_dump()
+    user_data['password'] = hash_password(user_data['password'])
+
+    new_user = Users(**user_data)
+    new_user.id = str(uuid.uuid4())
+    new_user.status = StatusType.active
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    # Add user to company
+    company_user = CompanyUsers(
+        user_id=new_user.id,
+        company_id=company_id,
+        role=role,
+        status=StatusType.active
+    )
+    db.add(company_user)
+    db.commit()
+    db.refresh(company_user)
+
+    return company_user
