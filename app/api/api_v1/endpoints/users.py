@@ -33,6 +33,7 @@ async def create_user(
     """
 
     try:
+        user_in.email = user_in.email.lower()
         existing_user = crud_user.get_by_email(
             db=db,
             email=user_in.email
