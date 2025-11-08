@@ -2,7 +2,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, Request
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional, Union
 from datetime import datetime, timedelta
 
 from app.api.dependencies import get_current_active_user, get_current_company_id, get_current_company_user
@@ -16,6 +16,7 @@ from app.schemas.schemas import UserCreate
 from app.services.auth import hash_password, verify_password, create_token_pair, verify_token
 from app.services.crud import user as crud_user
 from app.services.crud import user_time_off as crud_time_off
+from app.services.crud import company as crud_company
 from app.services.email_service import email_service, create_verification_token
 from app.models.enums import VerificationType, VerificationStatus
 
@@ -187,14 +188,31 @@ async def logout_user(response: Response):
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
 
 
-@router.get("/me", response_model=DataResponse[CompanyUser])
+@router.get("/me", response_model=DataResponse)
 async def get_current_user(
     *,
-    current_user: CompanyUser = Depends(get_current_company_user)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ) -> DataResponse:
     """
-    Get current logged-in user.
+    Get current logged-in user. Returns CompanyUser if user belongs to a company, otherwise returns User.
     """
+    # Check if user belongs to a company
+    if current_user.company_id:
+        try:
+            # Get company user details
+            company_user = crud_company.get_company_user(
+                db=db,
+                user_id=str(current_user.id),
+                company_id=str(current_user.company_id)
+            )
+            if company_user:
+                return DataResponse.success_response(data=company_user)
+        except Exception as e:
+            print(f"Error fetching company user: {str(e)}")
+            # Fall through to return basic user if company user fetch fails
+
+    # Return basic user if no company association
     return DataResponse.success_response(data=current_user)
 
 

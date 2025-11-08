@@ -60,7 +60,7 @@ class CompanyBase(BaseModel):
     website: Optional[str] = None
     description: Optional[str] = None
     team_size: Optional[int] = 0
-    status: StatusType = StatusType.inactive
+    status: StatusType = StatusType.active
 
 
 class CompanyCreate(CompanyBase):

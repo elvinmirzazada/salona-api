@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
+from app.schemas import User
 from app.services.auth import get_current_id, verify_token
 from app.services.crud import user as crud_user, customer as crud_customer, company as crud_company
 from app.models.models import Users, Customers, CompanyUsers
@@ -30,13 +31,14 @@ async def get_current_user(
         user_id = get_current_id(access_token)
         if user_id is None:
             raise credentials_exception
-            
-    except Exception:
-        raise credentials_exception
+
     
-    # Get user from database
-    user, company_id = crud_user.get(db, id=user_id)
-    if user is None:
+        # Get user from database
+        user, company_id = crud_user.get(db, id=user_id)
+        if user is None:
+            raise credentials_exception
+
+    except Exception:
         raise credentials_exception
     user.company_id = company_id
     return user

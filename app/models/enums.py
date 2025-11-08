@@ -97,3 +97,4 @@ class MembershipPlanType(str, Enum):
     standard = "standard"
     premium = "premium"
     vip = "vip"
+    free = "free"

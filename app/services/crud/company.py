@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTimeOffs, CategoryServices, \
     CompanyCategories, CompanyEmails, CompanyPhones, Users
 from app.models.models import CompanyUsers, Companies
-from app.schemas import CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, UserCreate
+from app.schemas import CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, UserCreate, CompanyUser
 from app.schemas.schemas import (
     CompanyCreate,
     User
@@ -24,9 +24,18 @@ def get_company_users(db: Session, company_id: str) -> List[CompanyUsers]:
     return list(db.query(CompanyUsers).filter(CompanyUsers.company_id == company_id).all())
 
 
-def get_company_user(db: Session, company_id: str, user_id: str) -> CompanyUsers:
-    """Get all users belonging to the given company."""
-    return db.query(CompanyUsers).filter(CompanyUsers.company_id == company_id, CompanyUsers.user_id == user_id).first()
+def get_company_user(db: Session, company_id: str, user_id: str) -> Optional[CompanyUser]:
+    """Get company user with user details."""
+    company_user = (db.query(CompanyUsers)
+                    .join(Users, Users.id == CompanyUsers.user_id)
+                    .filter(CompanyUsers.company_id == company_id, CompanyUsers.user_id == user_id)
+                    .first())
+
+    if not company_user:
+        return None
+
+    # Convert SQLAlchemy model to Pydantic schema
+    return CompanyUser.model_validate(company_user)
 
 
 def get_company_services(db: Session, company_id: str) -> List[CompanyCategories]:
