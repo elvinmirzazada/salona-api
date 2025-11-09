@@ -50,13 +50,13 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
     Returns a dictionary where keys are categories and values are lists of services
     """
     # Get all services for the company
-    services = (db.query(CompanyCategories.name, CompanyCategories.id, CategoryServices)
+    services = (db.query(CompanyCategories.name, CompanyCategories.id, CategoryServices, CompanyCategories.description)
                 .join(CompanyCategories, CategoryServices.category_id==CompanyCategories.id).filter(
                 CompanyCategories.company_id == company_id
     ).all())
     comp_categories = defaultdict(list)
     for service in services:
-        comp_categories[(service[0], service[1])].append(CategoryServiceResponse(
+        comp_categories[(service[0], service[1], service[3])].append(CategoryServiceResponse(
             id=service[2].id,
             name=service[2].name,
             duration=service[2].duration,
@@ -71,6 +71,7 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
         result.append(CompanyCategoryWithServicesResponse(
             name=category[0],
             id = category[1],
+            description=category[2],
             services=services
         ))
 

@@ -202,8 +202,8 @@ async def get_current_user(
         try:
             # Get company user details
             company_user = crud_company.get_company_user(
-                db=db,
-                user_id=str(current_user.id),
+                db=db, 
+                user_id=str(current_user.id), 
                 company_id=str(current_user.company_id)
             )
             if company_user:
@@ -211,7 +211,7 @@ async def get_current_user(
         except Exception as e:
             print(f"Error fetching company user: {str(e)}")
             # Fall through to return basic user if company user fetch fails
-
+    
     # Return basic user if no company association
     return DataResponse.success_response(data=current_user)
 

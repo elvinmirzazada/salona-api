@@ -207,13 +207,8 @@ async def get_all_bookings(
                                                                  company_id=company_id,
                                                                  start_date=start_date,
                                                                  end_date=end_date)
-    result = []
-    for booking in bookings:
-        tmp = Booking(**booking.__dict__)
-        for service in booking.booking_services:
-            tmp.user_ids.add(str(service.user_id))
-        result.append(tmp)
-    if not result:
+
+    if not bookings:
         return DataResponse.success_response(
             message="No bookings found",
             data=[],
@@ -222,7 +217,7 @@ async def get_all_bookings(
 
     return DataResponse.success_response(
         message="",
-        data=result,
+        data=bookings,
         status_code=status.HTTP_200_OK
     )
 

@@ -30,10 +30,10 @@ def get_company_user(db: Session, company_id: str, user_id: str) -> Optional[Com
                     .join(Users, Users.id == CompanyUsers.user_id)
                     .filter(CompanyUsers.company_id == company_id, CompanyUsers.user_id == user_id)
                     .first())
-
+    
     if not company_user:
         return None
-
+    
     # Convert SQLAlchemy model to Pydantic schema
     return CompanyUser.model_validate(company_user)
 

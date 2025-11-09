@@ -259,6 +259,7 @@ class CategoryServices(BaseModel):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     company_category = relationship("CompanyCategories", back_populates="category_service")
+    booking_category_services = relationship("BookingServices", back_populates="category_service")
 
 
 class BookingServices(BaseModel):
@@ -275,6 +276,7 @@ class BookingServices(BaseModel):
     end_at = Column(DateTime, nullable=True)
 
     booking = relationship("Bookings", back_populates="booking_services")
+    category_service = relationship("CategoryServices", back_populates="booking_category_services")
 
 
 

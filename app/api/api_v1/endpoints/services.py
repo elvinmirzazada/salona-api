@@ -169,7 +169,7 @@ def delete_category(
     )
 
 
-@router.post("/services", response_model=DataResponse[CategoryServiceResponse], status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=DataResponse[CategoryServiceResponse], status_code=status.HTTP_201_CREATED)
 def create_service(
         *,
         db: Session = Depends(get_db),

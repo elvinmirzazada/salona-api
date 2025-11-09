@@ -151,6 +151,17 @@ class BookingUpdate(BaseModel):
     services: Optional[List[BookingServiceRequest]] = None
 
 
+class CategoryServiceResponse(BaseModel):
+    id: UUID4
+    name: str
+    duration: int
+    price: float
+    discount_price: Optional[float] = None
+    status: StatusType
+    additional_info: Optional[str] = None
+    buffer_before: Optional[int] = 0
+    buffer_after: Optional[int] = 0
+
 
 
 class BookingService(TimestampedModel):
@@ -164,7 +175,7 @@ class BookingService(TimestampedModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
 
-    # service: Optional[CompanyCategories] = None
+    category_service: Optional[CategoryServiceResponse] = None
     # assigned_user: Optional[CompanyUser] = None
 
 
@@ -231,17 +242,6 @@ class AvailabilityResponse(BaseModel):
     weekly: Optional[WeeklyAvailability] = None
     monthly: Optional[MonthlyAvailability] = None
 
-
-class CategoryServiceResponse(BaseModel):
-    id: UUID4
-    name: str
-    duration: int
-    price: float
-    discount_price: Optional[float] = None
-    status: StatusType
-    additional_info: Optional[str] = None
-    buffer_before: Optional[int] = 0
-    buffer_after: Optional[int] = 0
 
 class CategoryServiceBase(BaseModel):
     name: str
