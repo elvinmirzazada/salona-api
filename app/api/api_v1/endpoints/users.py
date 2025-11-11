@@ -42,11 +42,12 @@ async def create_user(
         if existing_user:
             response.status_code = status.HTTP_400_BAD_REQUEST
             return ResponseMessage(message="User with this email already exists", status="error")
-
+        print('Creating user...')
         user_in.password = hash_password(user_in.password)
         new_user = crud_user.create(db=db, obj_in=user_in)
 
         # Create verification token
+        print('Creating verification token...')
         verification_record = create_verification_token(
             db=db,
             entity_id=new_user.id,
@@ -55,6 +56,7 @@ async def create_user(
             expires_in_hours=24
         )
 
+        print('Sending verification email...')
         # Send verification email
         user_name = f"{new_user.first_name} {new_user.last_name}"
         email_sent = email_service.send_verification_email(
