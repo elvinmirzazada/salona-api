@@ -66,7 +66,7 @@ async def create_user(
         )
 
         if not email_sent:
-            print(f"Warning: Failed to send verification email to {new_user.email}")
+            raise Exception(f"Warning: Failed to send verification email to {new_user.email}")
 
         response.status_code = status.HTTP_201_CREATED
         return ResponseMessage(
@@ -74,6 +74,7 @@ async def create_user(
             status="success"
         )
     except Exception as e:
+        db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
 

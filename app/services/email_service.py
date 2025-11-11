@@ -1,10 +1,9 @@
-import smtplib
 import uuid
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from typing import Optional, Union
 from sqlalchemy.orm import Session
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, Email, To, Content
 
 from app.core.config import settings
 from app.models.models import CustomerVerifications, UserVerifications
@@ -12,24 +11,18 @@ from app.models.enums import VerificationType, VerificationStatus
 
 
 class EmailService:
-    """Service for sending emails via SMTP - works for both users and customers"""
+    """Service for sending emails via SendGrid - works for both users and customers"""
 
     def __init__(
         self,
-        smtp_host: Optional[str] = None,
-        smtp_port: Optional[int] = None,
-        smtp_user: Optional[str] = None,
-        smtp_password: Optional[str] = None,
+        api_key: Optional[str] = None,
         from_email: Optional[str] = None,
         from_name: Optional[str] = None
     ):
-        self.smtp_host = smtp_host or getattr(settings, 'SMTP_HOST', '')
-        self.smtp_port = smtp_port or getattr(settings, 'SMTP_PORT', 587)
-        self.smtp_user = smtp_user or getattr(settings, 'SMTP_USER', '')
-        self.smtp_password = smtp_password or getattr(settings, 'SMTP_PASSWORD', '')
-        self.from_email = from_email or getattr(settings, 'SMTP_VERIFICATION_FROM_EMAIL', self.smtp_user)
-        self.from_name = from_name or getattr(settings, 'SMTP_VERIFICATION_FROM_NAME', 'Salona')
-    
+        self.api_key = api_key or getattr(settings, 'SENDGRID_API_KEY', '')
+        self.from_email = from_email or getattr(settings, 'SENDGRID_FROM_EMAIL', '')
+        self.from_name = from_name or getattr(settings, 'SENDGRID_FROM_NAME', 'Salona')
+
     def _send_email(
         self,
         to_email: str,
@@ -38,8 +31,8 @@ class EmailService:
         text_content: Optional[str] = None
     ) -> bool:
         """
-        Send an email via SMTP
-        
+        Send an email via SendGrid
+
         Args:
             to_email: Recipient email address
             subject: Email subject
@@ -50,30 +43,33 @@ class EmailService:
             bool: True if email sent successfully, False otherwise
         """
         try:
-            # Create message
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = f"{self.from_name} <{self.from_email}>"
-            msg['To'] = to_email
-            
-            # Add text and HTML parts
-            if text_content:
-                part1 = MIMEText(text_content, 'plain')
-                msg.attach(part1)
-            
-            part2 = MIMEText(html_content, 'html')
-            msg.attach(part2)
-            
-            # Send email
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls()
-                if self.smtp_user and self.smtp_password:
-                    server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
-            
-            return True
+            # Validate API key
+            if not self.api_key:
+                print("Error: SendGrid API key is not configured")
+                return False
+
+            # Create SendGrid message
+            message = Mail(
+                from_email=Email(self.from_email, self.from_name),
+                to_emails=To(to_email),
+                subject=subject,
+                plain_text_content=Content("text/plain", text_content or ""),
+                html_content=Content("text/html", html_content)
+            )
+
+            # Send email using SendGrid API
+            sg = SendGridAPIClient(self.api_key)
+            response = sg.send(message)
+
+            # Check if email was sent successfully (2xx status codes)
+            if 200 <= response.status_code < 300:
+                return True
+            else:
+                print(f"SendGrid API returned status code: {response.status_code}")
+                return False
+
         except Exception as e:
-            print(f"Error sending email: {str(e)}")
+            print(f"Error sending email via SendGrid: {str(e)}")
             return False
     
     def send_verification_email(
