@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from app.api.dependencies import get_current_active_user, get_current_company_id, get_current_company_user
 from app.db.session import get_db
 from app.models import AvailabilityType
+from app.models.models import Users
 from app.schemas import User, CompanyUser
 from app.schemas.auth import LoginRequest, TokenResponse, VerificationRequest
 from app.schemas.responses import DataResponse
@@ -195,7 +196,7 @@ async def logout_user(response: Response):
 async def get_current_user(
     *,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: Users = Depends(get_current_active_user)
 ) -> DataResponse:
     """
     Get current logged-in user. Returns CompanyUser if user belongs to a company, otherwise returns User.
@@ -215,8 +216,9 @@ async def get_current_user(
             print(f"Error fetching company user: {str(e)}")
             # Fall through to return basic user if company user fetch fails
     
-    # Return basic user if no company association
-    return DataResponse.success_response(data=current_user)
+    # Return basic user if no company association - convert SQLAlchemy model to Pydantic schema
+    user_schema = User.model_validate(current_user)
+    return DataResponse.success_response(data=user_schema)
 
 
 @router.post("/time-offs", response_model=DataResponse[TimeOff], status_code=status.HTTP_201_CREATED)
