@@ -327,6 +327,26 @@ async def get_company(
     )
 
 
+@router.get("/{company_id}", response_model=DataResponse[Company])
+async def get_company(
+    *,
+    db: Session = Depends(get_db),
+    company_id: str
+) -> DataResponse:
+    """
+    Get a specific business by ID.
+    Only the owner can access their business details.
+    """
+    company = crud_company.get(db=db, id=company_id)
+    if not company:
+        return DataResponse.error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            message="Company not found"
+        )
+    return DataResponse.success_response(
+        data=company
+    )
+
 @router.put("", response_model=DataResponse[Company])
 async def update_company(
     *,

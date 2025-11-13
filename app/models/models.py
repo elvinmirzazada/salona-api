@@ -109,7 +109,7 @@ class CompanyEmails(BaseModel):
 class CompanyPhones(BaseModel):
     __tablename__ = "company_phones"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     phone = Column(String(20), nullable=False)
     is_primary = Column(Boolean, default=False)
@@ -329,6 +329,28 @@ class CompanyMemberships(BaseModel):
         # Ensure a company can only have one active membership at a time
         Index(
             'unique_active_company_membership',
+            'company_id',
+            unique=True,
+            postgresql_where=(expression.text("status = 'active'"))
+        ),
+    )
+
+
+class TelegramIntegrations(BaseModel):
+    __tablename__ = "telegram_integrations"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    bot_token_encrypted = Column(String(255), nullable=False)
+    chat_id = Column(String(255), nullable=True)
+    status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        # Ensure a company can only have one active telegram integration
+        Index(
+            'unique_active_telegram_integration',
             'company_id',
             unique=True,
             postgresql_where=(expression.text("status = 'active'"))

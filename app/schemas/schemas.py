@@ -377,3 +377,26 @@ class CompanyMemberCreate(BaseModel):
     company_id: UUID4
     role: CompanyRoleType
 
+
+# Telegram Integration schemas
+class TelegramIntegrationBase(BaseModel):
+    chat_id: Optional[str] = None
+    status: StatusType = StatusType.active
+
+
+class TelegramIntegrationCreate(TelegramIntegrationBase):
+    bot_token: str
+
+
+class TelegramIntegrationUpdate(BaseModel):
+    chat_id: Optional[str] = None
+    bot_token: Optional[str] = None
+    status: Optional[StatusType] = None
+
+
+class TelegramIntegration(TelegramIntegrationBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    company_id: UUID4
+    bot_token: Optional[str] = None  # Decrypted token returned in response
