@@ -1,5 +1,6 @@
+import uuid
 from typing import List
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from sqlalchemy.orm import Session
 from app.api.dependencies import (
@@ -12,8 +13,8 @@ from app.api.dependencies import (
     get_current_user_role
 )
 from app.db.session import get_db
-from app.models.models import Users
-from app.models.enums import CompanyRoleType
+from app.models.models import Users, CompanyUsers
+from app.models.enums import CompanyRoleType, StatusType, InvitationStatus
 from app.schemas import CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, \
     CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate, \
     CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate, \
@@ -862,5 +863,135 @@ async def get_company_invitations(
     except Exception as e:
         return DataResponse.error_response(
             message=f"Failed to retrieve invitations: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.post("/invitations/{token}/check-and-join", response_model=DataResponse, status_code=status.HTTP_200_OK)
+async def check_invitation_and_join(
+    *,
+    db: Session = Depends(get_db),
+    token: str,
+    response: Response
+) -> DataResponse:
+    """
+    Check if the email from invitation is registered.
+    If registered, add user to company and return status.
+    If not registered, return different status so UI knows to show signup form.
+
+    Returns:
+    - status: "user_exists" - User is registered, added to company, ready to accept
+    - status: "user_not_found" - User not registered, show signup form
+    - status: "invitation_expired" - Invitation has expired
+    - status: "already_member" - User already a member of this company
+    """
+    try:
+        # Get invitation by token
+        invitation = crud_invitation.get_invitation_by_token(db=db, token=token)
+
+        if not invitation:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="Invitation not found or has expired",
+                status_code=status.HTTP_404_NOT_FOUND,
+                data={"status": "invitation_expired"}
+            )
+
+        # Check if user exists with this email
+        existing_user = crud_user.get_by_email(db=db, email=invitation.email)
+
+        if not existing_user:
+            # User doesn't exist - return status for UI to show signup form
+            return DataResponse.success_response(
+                message="Email not registered. Please sign up.",
+                status_code=status.HTTP_200_OK,
+                data={
+                    "status": "user_not_found",
+                    "email": invitation.email,
+                    "company_id": str(invitation.company_id),
+                    "role": invitation.role,
+                    "token": token
+                }
+            )
+
+        # Check if user is already a member of this company
+        existing_company_user = db.query(CompanyUsers).filter(
+            CompanyUsers.user_id == existing_user.id,
+            CompanyUsers.company_id == invitation.company_id
+        ).first()
+
+        if existing_company_user:
+            # User already a member
+            if existing_company_user.status == StatusType.active:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return DataResponse.error_response(
+                    message="User is already a member of this company",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    data={"status": "already_member"}
+                )
+            else:
+                # Update status to active and role based on invitation
+                existing_company_user.status = StatusType.active
+                existing_company_user.role = invitation.role
+                db.add(existing_company_user)
+
+                # Mark invitation as used
+                invitation.status = InvitationStatus.USED
+                invitation.updated_at = datetime.now()
+                db.add(invitation)
+                db.commit()
+
+                return DataResponse.success_response(
+                    message="User successfully joined the company",
+                    status_code=status.HTTP_200_OK,
+                    data={
+                        "status": "user_exists",
+                        "user_id": str(existing_user.id),
+                        "email": existing_user.email,
+                        "first_name": existing_user.first_name,
+                        "last_name": existing_user.last_name,
+                        "company_id": str(invitation.company_id),
+                        "role": invitation.role,
+                        "message": "Rejoined the company"
+                    }
+                )
+
+        # User exists but not yet a member - add them to company
+        company_user = CompanyUsers(
+            id=uuid.uuid4(),
+            user_id=existing_user.id,
+            company_id=invitation.company_id,
+            role=invitation.role,
+            status=StatusType.active
+        )
+        db.add(company_user)
+
+        # Mark invitation as used
+        # invitation.status = InvitationStatus.USED
+        invitation.updated_at = datetime.now()
+        db.add(invitation)
+        db.commit()
+
+        # User exists and has been added to company
+        return DataResponse.success_response(
+            message="Registered user added to company successfully",
+            status_code=status.HTTP_200_OK,
+            data={
+                "status": "user_exists",
+                "user_id": str(existing_user.id),
+                "email": existing_user.email,
+                "first_name": existing_user.first_name,
+                "last_name": existing_user.last_name,
+                "company_id": str(invitation.company_id),
+                "role": invitation.role,
+                "message": "User joined the company"
+            }
+        )
+
+    except Exception as e:
+        db.rollback()
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to process invitation: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

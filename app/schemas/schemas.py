@@ -414,9 +414,9 @@ class InvitationCreate(InvitationBase):
 
 class InvitationAccept(BaseModel):
     token: str
-    first_name: str
-    last_name: str
-    phone: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
     password: Optional[str] = None  # Only required if user doesn't exist
 
 

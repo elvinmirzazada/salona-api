@@ -249,7 +249,7 @@ class EmailService:
         Returns:
             bool: True if email sent successfully
         """
-        invitation_url = f"{settings.FRONTEND_URL}/accept-invitation?token={invitation_token}"
+        invitation_url = f"{settings.FRONTEND_URL}/users/accept-invitation?token={invitation_token}"
 
         subject = f"You're Invited to Join {company_name} on Salona"
 

@@ -160,7 +160,7 @@ def get_company_invitations(
     """
     try:
         query = db.query(Invitations).filter(
-            Invitations.company_id == company_id
+            Invitations.company_id == company_id, Invitations.status != 'used'
         )
 
         if status:
