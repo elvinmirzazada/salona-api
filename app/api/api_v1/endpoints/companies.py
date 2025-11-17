@@ -16,7 +16,8 @@ from app.models.models import Users
 from app.models.enums import CompanyRoleType
 from app.schemas import CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, \
     CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate, \
-    CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate
+    CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate, \
+    Invitation, InvitationCreate, InvitationAccept
 from app.schemas.responses import DataResponse
 from app.services.crud import company as crud_company
 from app.services.crud import customer as crud_customer
@@ -25,6 +26,9 @@ from app.services.crud import user_availability as crud_user_availability
 from app.services.crud import booking as crud_booking
 from app.services.crud import user as crud_user
 from app.services.crud import user_time_off as crud_user_time_off
+from app.services.crud import invitation as crud_invitation
+from app.services.email_service import email_service
+from app.services.auth import hash_password
 
 router = APIRouter()
 
@@ -565,40 +569,298 @@ async def add_company_member(
             message=f"Failed to add member to company: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-@router.post("/members", response_model=DataResponse[CompanyUser], status_code=status.HTTP_201_CREATED)
-async def add_company_member(
+
+
+# ============== STAFF INVITATION ENDPOINTS ==============
+
+@router.post("/invitations", response_model=DataResponse[Invitation], status_code=status.HTTP_201_CREATED)
+async def invite_staff_member(
     *,
     db: Session = Depends(get_db),
-    user_in: UserCreate,
-    role: CompanyRoleType = Query(..., description="Role to assign to the user in the company"),
     company_id: str = Depends(get_current_company_id),
-    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can add members
+    invitation_in: InvitationCreate,
+    current_user: User = Depends(get_current_active_user),
+    _: None = Depends(require_admin_or_owner)
 ) -> DataResponse:
     """
-    Create a new user and add them to the company with a specified role.
-    If a user with the email already exists, they will be added to the company.
+    Invite a staff member to the company.
+
+    If the invited email is not registered:
+    - Create invitation with PENDING status
+    - Send invitation email with sign-up link
+
+    If the invited email is already registered:
+    - Create invitation with PENDING status
+    - Send invitation email with acceptance link
+
     Requires admin or owner role.
     """
     try:
-        company_user = crud_company.create_company_member(
+        # Check if email is already registered
+        existing_user = crud_user.get_by_email(db=db, email=invitation_in.email.lower())
+        is_existing_user = existing_user is not None
+
+        # Set default role to staff if not provided
+        role = invitation_in.role or CompanyRoleType.staff
+
+        # Create invitation
+        invitation = crud_invitation.create_invitation(
             db=db,
-            user_in=user_in,
             company_id=company_id,
+            email=invitation_in.email.lower(),
             role=role
         )
+
+        # Get company details for email
+        company = crud_company.get(db=db, id=company_id)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found"
+            )
+
+        # Send invitation email
+        invited_by = f"{current_user.first_name} {current_user.last_name}"
+        email_sent = email_service.send_staff_invitation_email(
+            to_email=invitation.email,
+            invitation_token=invitation.token,
+            invited_by=invited_by,
+            company_name=company.name,
+            is_existing_user=is_existing_user
+        )
+
+        if not email_sent:
+            return DataResponse.error_response(
+                message="Invitation created but failed to send email. Please try again.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
         return DataResponse.success_response(
-            data=company_user,
-            message="Member added to company successfully",
+            data=Invitation.model_validate(invitation),
+            message="Staff member invited successfully",
             status_code=status.HTTP_201_CREATED
         )
-    except ValueError as e:
-        return DataResponse.error_response(
-            message=str(e),
-            status_code=status.HTTP_400_BAD_REQUEST
-        )
+
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         return DataResponse.error_response(
-            message=f"Failed to add member to company: {str(e)}",
+            message=f"Failed to invite staff member: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.post("/invitations/accept", response_model=DataResponse, status_code=status.HTTP_200_OK)
+async def accept_invitation(
+    *,
+    db: Session = Depends(get_db),
+    invitation_in: InvitationAccept,
+    response: Response
+) -> DataResponse:
+    """
+    Accept a staff invitation.
+
+    If the user doesn't exist (new user):
+    - Create user account with provided details
+    - Mark invitation as USED
+    - Add user to company with invited role
+    - Activate company_users record
+
+    If the user already exists (existing user):
+    - Mark invitation as USED
+    - Add user to company with invited role (or update if already exists)
+    - Activate company_users record
+    """
+    try:
+        # Get invitation
+        invitation = crud_invitation.get_invitation_by_token(db=db, token=invitation_in.token)
+
+        if not invitation:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="Invitation not found or has expired",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if user exists
+        existing_user = crud_user.get_by_email(db=db, email=invitation.email)
+
+        if not existing_user:
+            # Create new user
+            if not invitation_in.password:
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return DataResponse.error_response(
+                    message="Password is required for new user registration",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Hash password
+            hashed_password = hash_password(invitation_in.password)
+
+            # Create user
+            user_create_data = {
+                "first_name": invitation_in.first_name,
+                "last_name": invitation_in.last_name,
+                "email": invitation.email,
+                "password": hashed_password,
+                "phone": invitation_in.phone
+            }
+
+            from app.schemas.schemas import UserCreate as UserCreateSchema
+            user_in = UserCreateSchema(**user_create_data)
+            new_user = crud_user.create(db=db, obj_in=user_in)
+            user_id = new_user.id
+        else:
+            # Use existing user
+            user_id = existing_user.id
+
+        # Accept invitation (mark as USED and add to company)
+        crud_invitation.accept_invitation(
+            db=db,
+            invitation=invitation,
+            user_id=user_id
+        )
+
+        return DataResponse.success_response(
+            message="Invitation accepted successfully",
+            status_code=status.HTTP_200_OK
+        )
+
+    except Exception as e:
+        db.rollback()
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to accept invitation: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.post("/invitations/{token}/resend", response_model=DataResponse[Invitation])
+async def resend_invitation(
+    *,
+    db: Session = Depends(get_db),
+    company_id: str = Depends(get_current_company_id),
+    token: str,
+    current_user: User = Depends(get_current_active_user),
+    _: None = Depends(require_admin_or_owner)
+) -> DataResponse:
+    """
+    Resend an invitation to a staff member.
+
+    This generates a new token and resets the invitation to PENDING status.
+    Only works for expired or pending invitations.
+
+    Requires admin or owner role.
+    """
+    try:
+        from app.models.models import Invitations
+
+        # Get the invitation by current token
+        invitation = db.query(Invitations).filter(
+            Invitations.token == token,
+            Invitations.company_id == company_id
+        ).first()
+
+        if not invitation:
+            return DataResponse.error_response(
+                message="Invitation not found",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+        # Resend invitation
+        resent_invitation = crud_invitation.resend_invitation(
+            db=db,
+            company_id=company_id,
+            email=invitation.email
+        )
+
+        if not resent_invitation:
+            return DataResponse.error_response(
+                message="Invitation not found or cannot be resent",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get company details for email
+        company = crud_company.get(db=db, id=company_id)
+
+        # Check if user exists for email
+        existing_user = crud_user.get_by_email(db=db, email=resent_invitation.email)
+        is_existing_user = existing_user is not None
+
+        # Send invitation email
+        invited_by = f"{current_user.first_name} {current_user.last_name}"
+        email_sent = email_service.send_staff_invitation_email(
+            to_email=resent_invitation.email,
+            invitation_token=resent_invitation.token,
+            invited_by=invited_by,
+            company_name=company.name,
+            is_existing_user=is_existing_user
+        )
+
+        if not email_sent:
+            return DataResponse.error_response(
+                message="Invitation updated but failed to send email",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return DataResponse.success_response(
+            data=Invitation.model_validate(resent_invitation),
+            message="Invitation resent successfully",
+            status_code=status.HTTP_200_OK
+        )
+
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to resend invitation: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.get("/all/invitations", response_model=DataResponse[List[Invitation]])
+async def get_company_invitations(
+    *,
+    db: Session = Depends(get_db),
+    company_id: str = Depends(get_current_company_id),
+    status_filter: str = Query(None, description="Filter by status: pending, used, expired, declined"),
+    current_user: User = Depends(get_current_active_user),
+    _: None = Depends(require_admin_or_owner)
+) -> DataResponse:
+    """
+    Get all invitations for a company.
+
+    Optional status filter: pending, used, expired, declined
+
+    Requires admin or owner role.
+    """
+    try:
+        from app.models.enums import InvitationStatus
+
+        # Parse status filter
+        status_enum = None
+        if status_filter:
+            status_enum = InvitationStatus(status_filter.upper())
+
+        invitations = crud_invitation.get_company_invitations(
+            db=db,
+            company_id=company_id,
+            status=status_enum
+        )
+
+        return DataResponse.success_response(
+            data=[Invitation.model_validate(inv) for inv in invitations],
+            message="Company invitations retrieved successfully",
+            status_code=status.HTTP_200_OK
+        )
+
+    except ValueError:
+        return DataResponse.error_response(
+            message="Invalid status filter",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        return DataResponse.error_response(
+            message=f"Failed to retrieve invitations: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

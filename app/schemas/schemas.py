@@ -400,3 +400,30 @@ class TelegramIntegration(TelegramIntegrationBase, TimestampedModel):
     id: UUID4
     company_id: UUID4
     bot_token: Optional[str] = None  # Decrypted token returned in response
+
+
+# Invitation schemas
+class InvitationBase(BaseModel):
+    email: str
+    role: Optional[CompanyRoleType] = CompanyRoleType.staff
+
+
+class InvitationCreate(InvitationBase):
+    pass
+
+
+class InvitationAccept(BaseModel):
+    token: str
+    first_name: str
+    last_name: str
+    phone: str
+    password: Optional[str] = None  # Only required if user doesn't exist
+
+
+class Invitation(InvitationBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    company_id: UUID4
+    token: Optional[str] = None  # Don't expose token in responses
+    status: str

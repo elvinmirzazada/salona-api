@@ -98,3 +98,9 @@ class MembershipPlanType(str, Enum):
     premium = "premium"
     vip = "vip"
     free = "free"
+
+class InvitationStatus(str, Enum):
+    PENDING = "pending"
+    USED = "used"
+    EXPIRED = "expired"
+    DECLINED = "declined"

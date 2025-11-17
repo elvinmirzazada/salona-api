@@ -228,6 +228,154 @@ class EmailService:
         
         return self._send_email(to_email, subject, html_content, text_content)
 
+    def send_staff_invitation_email(
+        self,
+        to_email: str,
+        invitation_token: str,
+        invited_by: str,
+        company_name: str,
+        is_existing_user: bool = False
+    ) -> bool:
+        """
+        Send staff member invitation email
+
+        Args:
+            to_email: Email address to invite
+            invitation_token: Invitation token
+            invited_by: Name of person sending invitation
+            company_name: Company name
+            is_existing_user: Whether the user already exists in the system
+
+        Returns:
+            bool: True if email sent successfully
+        """
+        invitation_url = f"{settings.FRONTEND_URL}/accept-invitation?token={invitation_token}"
+
+        subject = f"You're Invited to Join {company_name} on Salona"
+
+        if is_existing_user:
+            # Email for existing users
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px;">
+                    <h1 style="color: #2c3e50; margin-bottom: 20px;">You've Been Invited to Join a Team!</h1>
+                    
+                    <p>Hi there,</p>
+                    
+                    <p><strong>{invited_by}</strong> has invited you to join <strong>{company_name}</strong> on Salona as a staff member.</p>
+                    
+                    <p>To accept this invitation and start collaborating, click the button below:</p>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="{invitation_url}" 
+                           style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                            Accept Invitation
+                        </a>
+                    </div>
+                    
+                    <p>Or copy and paste this link into your browser:</p>
+                    <p style="background-color: #e9ecef; padding: 10px; border-radius: 5px; word-break: break-all;">
+                        {invitation_url}
+                    </p>
+                    
+                    <p style="color: #6c757d; font-size: 14px; margin-top: 30px;">
+                        This invitation will expire in 3 days. If you didn't expect this invitation, you can safely ignore this email.
+                    </p>
+                    
+                    <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+                    
+                    <p style="color: #6c757d; font-size: 12px; text-align: center;">
+                        © {datetime.now().year} Salona. All rights reserved.
+                    </p>
+                </div>
+            </body>
+            </html>
+            """
+
+            text_content = f"""
+            You've Been Invited to Join a Team!
+            
+            Hi there,
+            
+            {invited_by} has invited you to join {company_name} on Salona as a staff member.
+            
+            To accept this invitation and start collaborating, click the link below:
+            
+            {invitation_url}
+            
+            This invitation will expire in 3 days. If you didn't expect this invitation, you can safely ignore this email.
+            
+            © {datetime.now().year} Salona. All rights reserved.
+            """
+        else:
+            # Email for new users
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px;">
+                    <h1 style="color: #2c3e50; margin-bottom: 20px;">Welcome to Salona!</h1>
+                    
+                    <p>Hi there,</p>
+                    
+                    <p><strong>{invited_by}</strong> has invited you to join <strong>{company_name}</strong> on Salona as a staff member.</p>
+                    
+                    <p>To accept this invitation and create your account, click the button below:</p>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="{invitation_url}" 
+                           style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                            Accept Invitation & Sign Up
+                        </a>
+                    </div>
+                    
+                    <p>Or copy and paste this link into your browser:</p>
+                    <p style="background-color: #e9ecef; padding: 10px; border-radius: 5px; word-break: break-all;">
+                        {invitation_url}
+                    </p>
+                    
+                    <p style="color: #6c757d; font-size: 14px; margin-top: 30px;">
+                        This invitation will expire in 3 days. Once you accept, you'll be able to create your account and get started with {company_name}.
+                    </p>
+                    
+                    <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+                    
+                    <p style="color: #6c757d; font-size: 12px; text-align: center;">
+                        © {datetime.now().year} Salona. All rights reserved.
+                    </p>
+                </div>
+            </body>
+            </html>
+            """
+
+            text_content = f"""
+            Welcome to Salona!
+            
+            Hi there,
+            
+            {invited_by} has invited you to join {company_name} on Salona as a staff member.
+            
+            To accept this invitation and create your account, click the link below:
+            
+            {invitation_url}
+            
+            This invitation will expire in 3 days. Once you accept, you'll be able to create your account and get started with {company_name}.
+            
+            © {datetime.now().year} Salona. All rights reserved.
+            """
+
+        return self._send_email(to_email, subject, html_content, text_content)
+
 
 def create_verification_token(
     db: Session,

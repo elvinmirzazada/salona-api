@@ -12,7 +12,7 @@ from sqlalchemy.sql import expression
 from app.db.base_class import BaseModel
 from app.models.enums import (StatusType, BookingStatus, CustomerStatusType, EmailStatusType,
                               PhoneStatusType, VerificationType, VerificationStatus,
-                              CompanyRoleType, NotificationType, NotificationStatus, MembershipPlanType)
+                              CompanyRoleType, NotificationType, NotificationStatus, MembershipPlanType, InvitationStatus)
 
 
 #
@@ -94,6 +94,8 @@ class Companies(BaseModel):
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    invitations = relationship("Invitations", back_populates="company")
 
 
 class CompanyEmails(BaseModel):
@@ -356,3 +358,20 @@ class TelegramIntegrations(BaseModel):
             postgresql_where=(expression.text("status = 'active'"))
         ),
     )
+
+
+class Invitations(BaseModel):
+    __tablename__ = "invitations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True)
+    email = Column(String(255), nullable=False)
+    token = Column(String(255), nullable=False, unique=True)
+    role = Column(SQLAlchemyEnum(CompanyRoleType), default=CompanyRoleType.viewer)
+    status = Column(SQLAlchemyEnum(InvitationStatus), default=InvitationStatus.PENDING)
+    company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    company = relationship("Companies", back_populates="invitations")
+
+    __table_args__ = (UniqueConstraint('email', 'company_id', name='_email_company_uc'),)
