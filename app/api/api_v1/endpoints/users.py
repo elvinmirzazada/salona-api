@@ -601,7 +601,7 @@ async def google_authorize(
         )
 
 
-@router.post("/auth/google/callback", response_model=DataResponse[GoogleOAuthResponse])
+@router.get("/auth/google/callback", response_model=DataResponse[GoogleOAuthResponse])
 async def google_callback(
     callback_data: GoogleCallbackRequest,
     response: Response,
