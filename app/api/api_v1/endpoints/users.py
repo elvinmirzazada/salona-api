@@ -603,9 +603,10 @@ async def google_authorize(
 
 @router.get("/auth/google/callback", response_model=DataResponse[GoogleOAuthResponse])
 async def google_callback(
-    callback_data: GoogleCallbackRequest,
     response: Response,
     request: Request,
+    code: str = Query(..., description="Authorization code from Google"),
+    state: str = Query(..., description="State token for CSRF protection"),
     db: Session = Depends(get_db)
 ) -> DataResponse:
     """
@@ -618,17 +619,21 @@ async def google_callback(
     try:
         # Verify state token for CSRF protection
         stored_state = request.cookies.get("google_oauth_state")
-        if not stored_state or stored_state != callback_data.state:
+        if not stored_state or stored_state != state:
             response.status_code = status.HTTP_400_BAD_REQUEST
             return DataResponse.error_response(
                 message="Invalid state token - CSRF protection failed",
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
+        # Get redirect_uri from environment or default
+        from app.core.config import settings
+        redirect_uri = getattr(settings, 'GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/v1/users/auth/google/callback')
+
         # Exchange authorization code for tokens
         token_response = GoogleOAuthService.exchange_code_for_token(
-            callback_data.code,
-            callback_data.redirect_uri
+            code,
+            redirect_uri
         )
 
         if not token_response:
