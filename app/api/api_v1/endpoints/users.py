@@ -1,16 +1,17 @@
-import time
-
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, Request
 from sqlalchemy.orm import Session
-from typing import List, Optional, Union
+from typing import List
 from datetime import datetime, timedelta
 
-from app.api.dependencies import get_current_active_user, get_current_company_id, get_current_company_user
+from app.api.dependencies import get_current_active_user, get_current_company_id
 from app.db.session import get_db
 from app.models import AvailabilityType
 from app.models.models import Users
-from app.schemas import User, CompanyUser
-from app.schemas.auth import LoginRequest, TokenResponse, VerificationRequest
+from app.schemas import User
+from app.schemas.auth import (
+    LoginRequest, TokenResponse, VerificationRequest,
+    GoogleAuthorizationResponse, GoogleCallbackRequest, GoogleOAuthResponse
+)
 from app.schemas.responses import DataResponse
 from app.schemas.schemas import ResponseMessage, TimeOffCreate, TimeOff, TimeOffUpdate
 from app.schemas.schemas import UserCreate
@@ -19,9 +20,64 @@ from app.services.crud import user as crud_user
 from app.services.crud import user_time_off as crud_time_off
 from app.services.crud import company as crud_company
 from app.services.email_service import email_service, create_verification_token
+from app.services.google_oauth import GoogleOAuthService
 from app.models.enums import VerificationType, VerificationStatus
 
 router = APIRouter()
+
+
+# Helper function to create a new user (reused by both signup and Google OAuth)
+async def _create_new_user(
+    db: Session,
+    user_in: UserCreate,
+    send_verification_email: bool = True
+) -> tuple[Users, str]:
+    """
+    Internal helper to create a new user.
+
+    Returns:
+        Tuple of (new_user, message)
+    """
+    user_in.email = user_in.email.lower()
+
+    # Check if user already exists
+    existing_user = crud_user.get_by_email(db=db, email=user_in.email)
+    if existing_user:
+        raise ValueError("User with this email already exists")
+
+    # Hash password
+    user_in.password = hash_password(user_in.password)
+    new_user = crud_user.create(db=db, obj_in=user_in)
+
+    # Create verification token
+    verification_record = create_verification_token(
+        db=db,
+        entity_id=new_user.id,
+        verification_type=VerificationType.EMAIL,
+        entity_type="user",
+        expires_in_hours=24
+    )
+
+    if send_verification_email:
+        # Send verification email
+        user_name = f"{new_user.first_name} {new_user.last_name}"
+        email_sent = email_service.send_verification_email(
+            to_email=new_user.email,
+            verification_token=verification_record.token,
+            user_name=user_name
+        )
+
+        if not email_sent:
+            raise Exception(f"Warning: Failed to send verification email to {new_user.email}")
+
+        message = "User created successfully. Please check your email to verify your account."
+    else:
+        # Auto-verify email for OAuth users
+        crud_user.verify_token(db=db, db_obj=verification_record)
+        message = "User created successfully via Google OAuth"
+
+    return new_user, message
+
 
 @router.post("/auth/signup", response_model=ResponseMessage, status_code=status.HTTP_201_CREATED)
 async def create_user(
@@ -35,45 +91,12 @@ async def create_user(
     """
 
     try:
-        user_in.email = user_in.email.lower()
-        existing_user = crud_user.get_by_email(
-            db=db,
-            email=user_in.email
-        )
-        if existing_user:
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return ResponseMessage(message="User with this email already exists", status="error")
-        print('Creating user...')
-        user_in.password = hash_password(user_in.password)
-        new_user = crud_user.create(db=db, obj_in=user_in)
-
-        # Create verification token
-        print('Creating verification token...')
-        verification_record = create_verification_token(
-            db=db,
-            entity_id=new_user.id,
-            verification_type=VerificationType.EMAIL,
-            entity_type="user",
-            expires_in_hours=24
-        )
-
-        print('Sending verification email...')
-        # Send verification email
-        user_name = f"{new_user.first_name} {new_user.last_name}"
-        email_sent = email_service.send_verification_email(
-            to_email=new_user.email,
-            verification_token=verification_record.token,
-            user_name=user_name
-        )
-
-        if not email_sent:
-            raise Exception(f"Warning: Failed to send verification email to {new_user.email}")
-
+        new_user, message = await _create_new_user(db, user_in, send_verification_email=True)
         response.status_code = status.HTTP_201_CREATED
-        return ResponseMessage(
-            message="User created successfully. Please check your email to verify your account.",
-            status="success"
-        )
+        return ResponseMessage(message=message, status="success")
+    except ValueError as e:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return ResponseMessage(message=str(e), status="error")
     except Exception as e:
         db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -174,7 +197,6 @@ async def user_login(
         samesite="none"
     )
 
-    print(tokens)
     return DataResponse.success_response(data = TokenResponse(**tokens))
 
 
@@ -543,4 +565,192 @@ async def verify_access_token(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to verify token: {str(e)}"
+        )
+
+
+@router.post("/auth/google/authorize", response_model=GoogleAuthorizationResponse)
+async def google_authorize(
+    response: Response
+) -> GoogleAuthorizationResponse:
+    """
+    Initiate Google OAuth flow - returns authorization URL and state token.
+    """
+    try:
+        state = GoogleOAuthService.generate_state_token()
+
+        # Store state in response cookie for verification later
+        response.set_cookie(
+            key="google_oauth_state",
+            value=state,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=600  # 10 minutes
+        )
+
+        authorization_url = GoogleOAuthService.get_authorization_url(state)
+
+        return GoogleAuthorizationResponse(
+            authorization_url=authorization_url,
+            state=state
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initiate Google OAuth: {str(e)}"
+        )
+
+
+@router.post("/auth/google/callback", response_model=DataResponse[GoogleOAuthResponse])
+async def google_callback(
+    callback_data: GoogleCallbackRequest,
+    response: Response,
+    request: Request,
+    db: Session = Depends(get_db)
+) -> DataResponse:
+    """
+    Handle Google OAuth callback for both signup and login.
+    - If user exists: authenticates and returns tokens
+    - If user doesn't exist: creates new user with random password and returns tokens
+
+    This unified endpoint eliminates the need for separate signup/login paths.
+    """
+    try:
+        # Verify state token for CSRF protection
+        stored_state = request.cookies.get("google_oauth_state")
+        if not stored_state or stored_state != callback_data.state:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                message="Invalid state token - CSRF protection failed",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Exchange authorization code for tokens
+        token_response = GoogleOAuthService.exchange_code_for_token(
+            callback_data.code,
+            callback_data.redirect_uri
+        )
+
+        if not token_response:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                message="Failed to exchange authorization code for tokens",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        access_token = token_response.get("access_token")
+        if not access_token:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                message="No access token in response",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get user info from Google
+        user_info = GoogleOAuthService.get_user_info(access_token)
+
+        if not user_info:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                message="Failed to retrieve user information from Google",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        google_email = user_info.get("email", "").lower()
+        google_name = user_info.get("name", "Google User")
+
+        if not google_email:
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                message="Google account does not have an email",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if user already exists
+        user = crud_user.get_by_email(db=db, email=google_email)
+
+        if user:
+            # User exists - authenticate them
+            company = crud_user.get_company_by_user(db, user.id)
+            tokens = create_token_pair(
+                user.id,
+                user.email,
+                actor="user",
+                ver="1",
+                company_id=str(company.company_id) if company else ''
+            )
+            auth_message = "Logged in successfully via Google"
+        else:
+            # User doesn't exist - create new user with random password
+            random_password = GoogleOAuthService.generate_random_password()
+            hashed_password = hash_password(random_password)
+
+            # Parse name into first and last name
+            name_parts = google_name.split(" ", 1)
+            first_name = name_parts[0] if name_parts else "User"
+            last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+            # Create user object
+            user_create = UserCreate(
+                first_name=first_name,
+                last_name=last_name,
+                email=google_email,
+                password=hashed_password,
+                phone=""  # Default empty phone for OAuth users
+            )
+
+            new_user, auth_message = await _create_new_user(
+                db=db,
+                user_in=user_create,
+                send_verification_email=False  # No email verification for OAuth users
+            )
+
+            # Create tokens for new user
+            tokens = create_token_pair(
+                new_user.id,
+                new_user.email,
+                actor="user",
+                ver="1",
+                company_id=""
+            )
+            auth_message = "Account created and logged in successfully via Google"
+            user = new_user
+
+        # Set cookies
+        response.set_cookie(
+            key="refresh_token",
+            value=tokens["refresh_token"],
+            httponly=True,
+            secure=True,
+            samesite="none"
+        )
+        response.set_cookie(
+            key="access_token",
+            value=tokens["access_token"],
+            max_age=tokens['expires_in'],
+            httponly=True,
+            secure=True,
+            samesite="none"
+        )
+
+        # Clear the state cookie
+        response.delete_cookie(key="google_oauth_state")
+
+        return DataResponse.success_response(
+            message=auth_message,
+            data=GoogleOAuthResponse(
+                access_token=tokens["access_token"],
+                refresh_token=tokens["refresh_token"],
+                token_type=tokens["token_type"],
+                expires_in=tokens["expires_in"],
+                user_email=google_email,
+                user_name=google_name
+            )
+        )
+
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Google OAuth authentication failed: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

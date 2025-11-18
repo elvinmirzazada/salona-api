@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     SENDGRID_FROM_EMAIL: Optional[str] = None
     SENDGRID_FROM_NAME: str = "Salona"
 
+    # Google OAuth Configuration
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_REDIRECT_URI: Optional[str] = None
+
     class Config:
         env_file = ".env"  # only used locally if no system env vars are set
         env_file_encoding = "utf-8"
