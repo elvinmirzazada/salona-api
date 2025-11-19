@@ -605,8 +605,8 @@ async def google_authorize(
 async def google_callback(
     response: Response,
     request: Request,
-    code: str = Query(..., description="Authorization code from Google"),
     state: str = Query(..., description="State token for CSRF protection"),
+    code: str = Query(..., description="Authorization code from Google"),
     db: Session = Depends(get_db)
 ) -> DataResponse:
     """
