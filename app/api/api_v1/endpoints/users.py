@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, 
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timedelta
-
+import logging
 from fastapi.responses import RedirectResponse, JSONResponse
 
 from app.api.dependencies import get_current_active_user, get_current_company_id
@@ -25,6 +25,8 @@ from app.services.email_service import email_service, create_verification_token
 from app.services.google_oauth import GoogleOAuthService
 from app.models.enums import VerificationType, VerificationStatus
 
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -662,6 +664,7 @@ async def google_callback(
         google_name = "Google User"  # Initialize with default value
         # Verify state token for CSRF protection
         stored_state = request.cookies.get("google_oauth_state")
+        logger.info(f'Stored state: {stored_state}, Received state: {state}')
         if not stored_state or stored_state != state:
             error = 'Invalid state parameter'
         else:
@@ -673,7 +676,6 @@ async def google_callback(
                 code,
                 redirect_uri
             )
-
             if not token_response:
                 error = 'Failed to exchange authorization code for tokens'
             else:
@@ -702,7 +704,7 @@ async def google_callback(
             )
         # Check if user already exists
         user = crud_user.get_by_email(db=db, email=google_email)
-
+        logger.info(f'User found: {user}')
         if user:
             # User exists - authenticate them
             company = crud_user.get_company_by_user(db, user.id)
@@ -776,6 +778,7 @@ async def google_callback(
 
         # Clear the state cookie
         response.delete_cookie(key="google_oauth_state")
+        logger.info('Successfully logged in')
         return DataResponse.success_response(data = TokenResponse(**tokens))
 
     except Exception as e:
