@@ -640,13 +640,14 @@ async def google_authorize(
         )
 
 
-@router.get("/auth/google/callback")
+@router.get("/auth/google/callback", response_model=DataResponse[TokenResponse])
 async def google_callback(
     request: Request,
+    response: Response,
     state: str = Query(..., description="State token for CSRF protection"),
     code: str = Query(..., description="Authorization code from Google"),
     db: Session = Depends(get_db)
-):
+) -> DataResponse:
     """
     Handle Google OAuth callback for both signup and login.
     - If user exists: authenticates and returns tokens
@@ -695,8 +696,10 @@ async def google_callback(
                             error = 'Google account does not have an email'
 
         if error:
-            return JSONResponse(content={"error": error}, status_code=status.HTTP_400_BAD_REQUEST)
-
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=error
+            )
         # Check if user already exists
         user = crud_user.get_by_email(db=db, email=google_email)
 
@@ -747,12 +750,6 @@ async def google_callback(
             auth_message = "Account created and logged in successfully via Google"
             user = new_user
 
-        # Create redirect response AFTER tokens are generated
-        response = RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/users/dashboard",
-            status_code=status.HTTP_303_SEE_OTHER  # Use 303 for proper POST->GET redirect
-        )
-
         # Determine cookie domain - use shared domain for production
         cookie_domain = ".salona.me" if "salona.me" in settings.API_URL else None
         is_production = "https://" in settings.API_URL
@@ -779,7 +776,7 @@ async def google_callback(
 
         # Clear the state cookie
         response.delete_cookie(key="google_oauth_state")
-        return response
+        return DataResponse.success_response(data = TokenResponse(**tokens))
 
     except Exception as e:
-        return JSONResponse(content={"error": "Google OAuth process failed"}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return DataResponse.error_response(message=f"Google OAuth process failed: {str(e)}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
