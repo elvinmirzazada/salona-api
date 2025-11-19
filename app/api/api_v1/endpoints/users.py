@@ -716,24 +716,28 @@ async def google_callback(
             status_code=status.HTTP_303_SEE_OTHER  # Use 303 for proper POST->GET redirect
         )
 
+        # Determine cookie domain - use shared domain for production
+        cookie_domain = ".salona.me" if "salona.me" in settings.API_URL else None
+        is_production = "https://" in settings.API_URL
+
         # Set cookies
         response.set_cookie(
             key="refresh_token",
             value=tokens["refresh_token"],
             max_age=3600,
             httponly=True,
-            secure=True,
-            samesite="none",
-            domain=None  # Let browser handle domain
+            secure=is_production,
+            samesite="lax",  # Changed from "none" to "lax" for same-site redirects
+            domain=cookie_domain
         )
         response.set_cookie(
             key="access_token",
             value=tokens["access_token"],
             max_age=tokens['expires_in'],
             httponly=True,
-            secure=True,
-            samesite="none",
-            domain=None  # Let browser handle domain
+            secure=is_production,
+            samesite="lax",  # Changed from "none" to "lax" for same-site redirects
+            domain=cookie_domain
         )
 
         # Clear the state cookie
