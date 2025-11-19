@@ -165,6 +165,8 @@ async def user_login(
     """
     Login professional using mobile number or email and return JWT tokens.
     """
+    from app.core.config import settings
+
     # Try to get professional by mobile number first
     user = crud_user.get_by_email(db, email=login_data.email)
 
@@ -181,22 +183,31 @@ async def user_login(
             detail="Invalid credentials"
         )
     company = crud_user.get_company_by_user(db, user.id)
+
     # Create token pair
     tokens = create_token_pair(user.id, user.email, actor="user", ver="1", company_id=str(company.company_id) if company else '')
+
+    # Determine cookie domain - use shared domain for production
+    cookie_domain = ".salona.me" if "salona.me" in settings.API_URL else None
+    is_production = "https://" in settings.API_URL
+
     response.set_cookie(
         key="refresh_token",
         value=tokens["refresh_token"],
+        max_age=3600,
         httponly=True,
-        secure=True,  # only over HTTPS
-        samesite="none"
+        secure=is_production,
+        samesite="lax",
+        domain=cookie_domain
     )
     response.set_cookie(
         key="access_token",
         value=tokens["access_token"],
         max_age=tokens['expires_in'],
         httponly=True,
-        secure=True,  # only over HTTPS
-        samesite="none"
+        secure=is_production,
+        samesite="lax",
+        domain=cookie_domain
     )
 
     return DataResponse.success_response(data = TokenResponse(**tokens))
@@ -207,9 +218,27 @@ async def logout_user(response: Response):
     """
     Logout professional by clearing the refresh token cookie
     """
+    from app.core.config import settings
     try:
-        response.delete_cookie(key="refresh_token")
-        response.delete_cookie(key="access_token")
+        # Determine cookie domain - must match the domain used when setting cookies
+        cookie_domain = ".salona.me" if "salona.me" in settings.API_URL else None
+        is_production = "https://" in settings.API_URL
+
+        # Delete cookies with the same parameters used when setting them
+        response.delete_cookie(
+            key="refresh_token",
+            domain=cookie_domain,
+            secure=is_production,
+            httponly=True,
+            samesite="lax"
+        )
+        response.delete_cookie(
+            key="access_token",
+            domain=cookie_domain,
+            secure=is_production,
+            httponly=True,
+            samesite="lax"
+        )
         return ResponseMessage(message="Logged out successfully", status="success")
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -462,6 +491,7 @@ async def refresh_token(
     """
     Refresh access and refresh tokens using the refresh token cookie.
     """
+    from app.core.config import settings
     try:
         # Get the refresh token from the request cookies
         refresh_token = request.cookies.get("refresh_token")
@@ -499,21 +529,28 @@ async def refresh_token(
             company_id=company_id
         )
 
+        # Determine cookie domain - use shared domain for production
+        cookie_domain = ".salona.me" if "salona.me" in settings.API_URL else None
+        is_production = "https://" in settings.API_URL
+
         # Set new cookies
         response.set_cookie(
             key="refresh_token",
             value=new_tokens["refresh_token"],
+            max_age=3600,
             httponly=True,
-            secure=True,
-            samesite="strict"
+            secure=is_production,
+            samesite="lax",
+            domain=cookie_domain
         )
         response.set_cookie(
             key="access_token",
             value=new_tokens["access_token"],
             max_age=new_tokens['expires_in'],
             httponly=True,
-            secure=True,
-            samesite="strict"
+            secure=is_production,
+            samesite="lax",
+            domain=cookie_domain
         )
 
         return DataResponse.success_response(data=TokenResponse(**new_tokens))
