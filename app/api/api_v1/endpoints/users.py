@@ -26,7 +26,7 @@ from app.services.google_oauth import GoogleOAuthService
 from app.models.enums import VerificationType, VerificationStatus
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 router = APIRouter()
 
 
