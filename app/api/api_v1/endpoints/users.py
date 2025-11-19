@@ -189,27 +189,20 @@ async def user_login(
     # Create token pair
     tokens = create_token_pair(user.id, user.email, actor="user", ver="1", company_id=str(company.company_id) if company else '')
 
-    # Determine cookie domain - use shared domain for production
-    cookie_domain = ".salona.me" if "salona.me" in settings.API_URL else None
-    is_production = "https://" in settings.API_URL
-
     response.set_cookie(
         key="refresh_token",
         value=tokens["refresh_token"],
-        max_age=3600,
         httponly=True,
-        secure=is_production,
-        samesite="lax",
-        domain=cookie_domain
+        secure=True,  # only over HTTPS
+        samesite="none"
     )
     response.set_cookie(
         key="access_token",
         value=tokens["access_token"],
         max_age=tokens['expires_in'],
         httponly=True,
-        secure=is_production,
-        samesite="lax",
-        domain=cookie_domain
+        secure=True,  # only over HTTPS
+        samesite="none"
     )
 
     return DataResponse.success_response(data = TokenResponse(**tokens))
@@ -752,28 +745,21 @@ async def google_callback(
             auth_message = "Account created and logged in successfully via Google"
             user = new_user
 
-        # Determine cookie domain - use shared domain for production
-        cookie_domain = ".salona.me" if "salona.me" in settings.API_URL else None
-        is_production = "https://" in settings.API_URL
-
         # Set cookies
         response.set_cookie(
             key="refresh_token",
             value=tokens["refresh_token"],
-            max_age=3600,
             httponly=True,
-            secure=is_production,
-            samesite="lax",  # Changed from "none" to "lax" for same-site redirects
-            domain=cookie_domain
+            secure=True,  # only over HTTPS
+            samesite="none"
         )
         response.set_cookie(
             key="access_token",
             value=tokens["access_token"],
             max_age=tokens['expires_in'],
             httponly=True,
-            secure=is_production,
-            samesite="lax",  # Changed from "none" to "lax" for same-site redirects
-            domain=cookie_domain
+            secure=True,  # only over HTTPS
+            samesite="none"
         )
 
         # Clear the state cookie
