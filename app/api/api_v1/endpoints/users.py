@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timedelta
 
+from fastapi.responses import RedirectResponse
+
 from app.api.dependencies import get_current_active_user, get_current_company_id
 from app.db.session import get_db
 from app.models import AvailabilityType
@@ -601,14 +603,14 @@ async def google_authorize(
         )
 
 
-@router.get("/auth/google/callback", response_model=DataResponse[GoogleOAuthResponse])
+@router.get("/auth/google/callback")
 async def google_callback(
     response: Response,
     request: Request,
     state: str = Query(..., description="State token for CSRF protection"),
     code: str = Query(..., description="Authorization code from Google"),
     db: Session = Depends(get_db)
-) -> DataResponse:
+):
     """
     Handle Google OAuth callback for both signup and login.
     - If user exists: authenticates and returns tokens
@@ -617,17 +619,18 @@ async def google_callback(
     This unified endpoint eliminates the need for separate signup/login paths.
     """
     try:
+
+        from app.core.config import settings
         # Verify state token for CSRF protection
         stored_state = request.cookies.get("google_oauth_state")
         if not stored_state or stored_state != state:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return DataResponse.error_response(
-                message="Invalid state token - CSRF protection failed",
+            return RedirectResponse(
+                url= f"{settings.FRONTEND_URL}/users/login/?error_message=Invalid+state+parameter",
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
         # Get redirect_uri from environment or default
-        from app.core.config import settings
         redirect_uri = getattr(settings, 'GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/v1/users/auth/google/callback')
 
         # Exchange authorization code for tokens
@@ -638,16 +641,16 @@ async def google_callback(
 
         if not token_response:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return DataResponse.error_response(
-                message="Failed to exchange authorization code for tokens",
+            return RedirectResponse(
+                url= f"{settings.FRONTEND_URL}/users/login/?error_message=Failed+to+exchange+authorization+code+for+tokens",
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
         access_token = token_response.get("access_token")
         if not access_token:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return DataResponse.error_response(
-                message="No access token in response",
+            return RedirectResponse(
+                url=f"{settings.FRONTEND_URL}/users/login/?error_message=No+access+token+in+response",
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
@@ -656,8 +659,8 @@ async def google_callback(
 
         if not user_info:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return DataResponse.error_response(
-                message="Failed to retrieve user information from Google",
+            return RedirectResponse(
+                url=f"{settings.FRONTEND_URL}/users/login/?error_message=Failed+to+retrieve+user+information+from+Google",
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
@@ -666,8 +669,8 @@ async def google_callback(
 
         if not google_email:
             response.status_code = status.HTTP_400_BAD_REQUEST
-            return DataResponse.error_response(
-                message="Google account does not have an email",
+            return RedirectResponse(
+                url=f"{settings.FRONTEND_URL}/users/login/?error_message=Google+account+does+not+have+an+email",
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
@@ -740,22 +743,14 @@ async def google_callback(
 
         # Clear the state cookie
         response.delete_cookie(key="google_oauth_state")
-
-        return DataResponse.success_response(
-            message=auth_message,
-            data=GoogleOAuthResponse(
-                access_token=tokens["access_token"],
-                refresh_token=tokens["refresh_token"],
-                token_type=tokens["token_type"],
-                expires_in=tokens["expires_in"],
-                user_email=google_email,
-                user_name=google_name
-            )
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/users/dashboard",
+            status_code=status.HTTP_400_BAD_REQUEST
         )
 
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        return DataResponse.error_response(
-            message=f"Google OAuth authentication failed: {str(e)}",
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/users/login?error_message=Google+OAuth+process+failed:+{str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
