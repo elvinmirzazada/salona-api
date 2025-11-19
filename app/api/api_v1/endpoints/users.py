@@ -657,7 +657,7 @@ async def google_callback(
         google_name = "Google User"  # Initialize with default value
         # Verify state token for CSRF protection
         stored_state = request.cookies.get("google_oauth_state")
-        logger.info(f'Stored state: {stored_state}, Received state: {state}')
+        print(f'Stored state: {stored_state}, Received state: {state}')
         if not stored_state or stored_state != state:
             error = 'Invalid state parameter'
         else:
@@ -669,6 +669,7 @@ async def google_callback(
                 code,
                 redirect_uri
             )
+            print(f'Token response: {token_response}')
             if not token_response:
                 error = 'Failed to exchange authorization code for tokens'
             else:
@@ -697,7 +698,7 @@ async def google_callback(
             )
         # Check if user already exists
         user = crud_user.get_by_email(db=db, email=google_email)
-        logger.info(f'User found: {user}')
+        print(f'User found: {user}')
         if user:
             # User exists - authenticate them
             company = crud_user.get_company_by_user(db, user.id)
@@ -764,8 +765,9 @@ async def google_callback(
 
         # Clear the state cookie
         response.delete_cookie(key="google_oauth_state")
-        logger.info('Successfully logged in')
+        print('Successfully logged in')
         return DataResponse.success_response(data = TokenResponse(**tokens))
 
     except Exception as e:
+        print(str(e))
         return DataResponse.error_response(message=f"Google OAuth process failed: {str(e)}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
