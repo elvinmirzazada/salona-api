@@ -621,6 +621,7 @@ async def google_callback(
     try:
         error = None
         google_email = ""
+        google_name = "Google User"  # Initialize with default value
         # Verify state token for CSRF protection
         stored_state = request.cookies.get("google_oauth_state")
         if not stored_state or stored_state != state:
@@ -661,10 +662,7 @@ async def google_callback(
 
         # Check if user already exists
         user = crud_user.get_by_email(db=db, email=google_email)
-        response = RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/users/dashboard",
-            status_code=status.HTTP_308_PERMANENT_REDIRECT
-        )
+
         if user:
             # User exists - authenticate them
             company = crud_user.get_company_by_user(db, user.id)
@@ -712,13 +710,21 @@ async def google_callback(
             auth_message = "Account created and logged in successfully via Google"
             user = new_user
 
+        # Create redirect response AFTER tokens are generated
+        response = RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/users/dashboard",
+            status_code=status.HTTP_303_SEE_OTHER  # Use 303 for proper POST->GET redirect
+        )
+
         # Set cookies
         response.set_cookie(
             key="refresh_token",
             value=tokens["refresh_token"],
+            max_age=3600,
             httponly=True,
             secure=True,
-            samesite="none"
+            samesite="none",
+            domain=None  # Let browser handle domain
         )
         response.set_cookie(
             key="access_token",
@@ -726,7 +732,8 @@ async def google_callback(
             max_age=tokens['expires_in'],
             httponly=True,
             secure=True,
-            samesite="none"
+            samesite="none",
+            domain=None  # Let browser handle domain
         )
 
         # Clear the state cookie
