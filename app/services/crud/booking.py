@@ -163,3 +163,17 @@ def confirm(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
         db.flush()  # Flush to get the updated object but don't commit yet
         return db_obj
     return None
+
+
+def complete(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
+    """
+    Complete a booking by setting its status to COMPLETED.
+    Returns the updated booking or None if booking not found.
+    """
+    db_obj = db.query(Bookings).filter(Bookings.id == booking_id).first()
+    if db_obj:
+        db_obj.status = BookingStatus.COMPLETED
+        db.add(db_obj)
+        db.flush()  # Flush to get the updated object but don't commit yet
+        return db_obj
+    return None

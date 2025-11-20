@@ -585,3 +585,84 @@ async def confirm_booking(
             data=None,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@router.put("/{booking_id}/complete", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
+async def complete_booking(
+        *,
+        booking_id: str,
+        db: Session = Depends(get_db),
+        response: Response,
+        company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Complete a booking by setting its status to COMPLETED.
+    """
+    try:
+        booking_uuid = UUID4(booking_id)
+    except ValueError:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Invalid booking ID format"
+        )
+
+    # Get the existing booking
+    existing_booking = crud_booking.get(db=db, id=booking_uuid)
+    if not existing_booking:
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return DataResponse.error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            message="Booking not found"
+        )
+
+    # Verify that the booking belongs to the company
+    if str(existing_booking.company_id) != company_id:
+        response.status_code = status.HTTP_403_FORBIDDEN
+        return DataResponse.error_response(
+            status_code=status.HTTP_403_FORBIDDEN,
+            message="You don't have permission to complete this booking"
+        )
+
+    # Check if booking is already cancelled
+    if existing_booking.status == BookingStatus.CANCELLED:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Cannot complete a cancelled booking"
+        )
+
+    # Check if booking is already completed
+    if existing_booking.status == BookingStatus.COMPLETED:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Booking is already completed"
+        )
+
+    try:
+        # Use the CRUD complete function to mark the booking as completed
+        completed_booking = crud_booking.complete(db=db, booking_id=booking_uuid)
+        if not completed_booking:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Booking not found"
+            )
+
+        db.commit()
+
+        response.status_code = status.HTTP_200_OK
+        return DataResponse.success_response(
+            message="Booking completed successfully",
+            data=completed_booking,
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        db.rollback()
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to complete booking: {str(e)}",
+            data=None,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
