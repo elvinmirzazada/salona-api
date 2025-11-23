@@ -21,25 +21,21 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    try:
-        # Extract access token from HTTP-only cookie
-        access_token = request.cookies.get("access_token")
-        if not access_token:
-            raise credentials_exception
-
-        # Extract user ID from token
-        user_id = get_current_id(access_token)
-        if user_id is None:
-            raise credentials_exception
-
-    
-        # Get user from database
-        user, company_id = crud_user.get(db, id=user_id)
-        if user is None:
-            raise credentials_exception
-
-    except Exception:
+    # Extract access token from HTTP-only cookie
+    access_token = request.cookies.get("access_token")
+    if not access_token:
         raise credentials_exception
+
+    # Extract user ID from token (this will raise HTTPException with specific message if token is expired)
+    user_id = get_current_id(access_token)
+    if user_id is None:
+        raise credentials_exception
+
+    # Get user from database
+    user, company_id = crud_user.get(db, id=user_id)
+    if user is None:
+        raise credentials_exception
+
     user.company_id = company_id
     return user
 
@@ -88,18 +84,14 @@ def get_token_payload(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    try:
-        # Extract access token from HTTP-only cookie
-        access_token = request.cookies.get("access_token")
-        if not access_token:
-            raise credentials_exception
+    # Extract access token from HTTP-only cookie
+    access_token = request.cookies.get("access_token")
+    if not access_token:
+        raise credentials_exception
 
-        # Extract payload from token
-        payload = verify_token(access_token)
-        if payload is None:
-            raise credentials_exception
-
-    except Exception:
+    # Extract payload from token (this will raise HTTPException with specific message if token is expired)
+    payload = verify_token(access_token)
+    if payload is None:
         raise credentials_exception
 
     return payload

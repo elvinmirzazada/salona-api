@@ -14,6 +14,8 @@ class VerificationRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     token_type: str
+    rt_expires_in: int
+    at_expires_in: int
 
 
 class RefreshTokenRequest(BaseModel):

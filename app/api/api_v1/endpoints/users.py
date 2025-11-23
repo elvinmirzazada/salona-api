@@ -192,6 +192,7 @@ async def user_login(
     response.set_cookie(
         key="refresh_token",
         value=tokens["refresh_token"],
+        max_age=tokens['rt_expires_in'],
         httponly=True,
         secure=True,  # only over HTTPS
         samesite="none"
@@ -199,7 +200,7 @@ async def user_login(
     response.set_cookie(
         key="access_token",
         value=tokens["access_token"],
-        max_age=tokens['expires_in'],
+        max_age=tokens['at_expires_in'],
         httponly=True,
         secure=True,  # only over HTTPS
         samesite="none"
@@ -517,7 +518,7 @@ async def refresh_token(
 
         # Create new tokens
         new_tokens = create_token_pair(
-            id=int(user_id),
+            id=user_id,
             email=email,
             actor="user",
             ver="1",
@@ -532,7 +533,7 @@ async def refresh_token(
         response.set_cookie(
             key="refresh_token",
             value=new_tokens["refresh_token"],
-            max_age=3600,
+            max_age=new_tokens['rt_expires_in'],
             httponly=True,
             secure=is_production,
             samesite="lax",
@@ -541,7 +542,7 @@ async def refresh_token(
         response.set_cookie(
             key="access_token",
             value=new_tokens["access_token"],
-            max_age=new_tokens['expires_in'],
+            max_age=new_tokens['at_expires_in'],
             httponly=True,
             secure=is_production,
             samesite="lax",
@@ -749,6 +750,7 @@ async def google_callback(
         response.set_cookie(
             key="refresh_token",
             value=tokens["refresh_token"],
+            max_age=tokens['rt_expires_in'],
             httponly=True,
             secure=True,  # only over HTTPS
             samesite="none"
@@ -756,7 +758,7 @@ async def google_callback(
         response.set_cookie(
             key="access_token",
             value=tokens["access_token"],
-            max_age=tokens['expires_in'],
+            max_age=tokens['at_expires_in'],
             httponly=True,
             secure=True,  # only over HTTPS
             samesite="none"
