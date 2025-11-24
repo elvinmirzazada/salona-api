@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -212,4 +212,36 @@ async def delete_telegram_integration(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while deleting integration"
+        )
+
+
+@router.get("/telegram/bots", response_model=DataResponse[Optional[List[TelegramIntegration]]])
+async def get_telegram_integrations(
+    *,
+    db: Session = Depends(get_db),
+) -> DataResponse[Optional[List[TelegramIntegration]]]:
+    """
+    Get the active Telegram integration for the current company.
+    """
+    try:
+        integrations = crud_integration.get_telegram_integrations(db=db)
+        if integrations:
+            response = [TelegramIntegration.model_validate(integration) for integration in integrations]
+        else:
+            response = []
+        return DataResponse.success_response(
+            data=response,
+            message="Telegram integration retrieved successfully"
+        )
+    except SQLAlchemyError as e:
+        logger.error(f"Database error retrieving telegram integration: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while retrieving integration"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving telegram integration: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while retrieving integration"
         )

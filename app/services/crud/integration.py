@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import UUID4
@@ -7,6 +7,7 @@ import logging
 
 from app.models.models import TelegramIntegrations
 from app.models.enums import StatusType
+from app.schemas import TelegramIntegration
 from app.schemas.schemas import TelegramIntegrationCreate, TelegramIntegrationUpdate
 from app.core.encryption import encrypt_token, decrypt_token
 
@@ -202,4 +203,29 @@ def delete_telegram_integration(db: Session, integration_id: UUID4) -> bool:
     except Exception as e:
         logger.error(f"Unexpected error while deleting telegram integration: {str(e)}")
         db.rollback()
+        raise
+
+
+def get_telegram_integrations(db: Session) -> Optional[List[TelegramIntegration]]:
+    """Get active telegram integration for a company"""
+    try:
+        integrations = db.query(TelegramIntegrations).filter(
+            TelegramIntegrations.status == StatusType.active
+        ).all()
+
+        # Decrypt the bot token if integration exists
+        for integration in integrations:
+            if integration and integration.bot_token_encrypted:
+                try:
+                    integration.bot_token = decrypt_token(str(integration.bot_token_encrypted))
+                except Exception as e:
+                    # Return integration without decrypted token
+                    integration.bot_token = None
+
+        return integrations
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while fetching telegram integration: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error while fetching telegram integration: {str(e)}")
         raise
