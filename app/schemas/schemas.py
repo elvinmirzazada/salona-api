@@ -161,7 +161,18 @@ class CategoryServiceResponse(BaseModel):
     additional_info: Optional[str] = None
     buffer_before: Optional[int] = 0
     buffer_after: Optional[int] = 0
+    assigned_staff: Optional[List['StaffMember']] = []  # List of staff assigned to this service
 
+
+class StaffMember(BaseModel):
+    """Simple staff member schema for service assignments"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    first_name: str
+    last_name: str
+    email: str
+    phone: str
 
 
 class BookingService(TimestampedModel):
@@ -255,6 +266,7 @@ class CategoryServiceBase(BaseModel):
 
 class CategoryServiceCreate(CategoryServiceBase):
     category_id: str
+    staff_ids: Optional[List[UUID4]] = []  # List of staff member IDs to assign to this service
 
 class CategoryServiceUpdate(BaseModel):
     name: Optional[str] = None
@@ -265,6 +277,7 @@ class CategoryServiceUpdate(BaseModel):
     status: Optional[StatusType] = None
     buffer_before: Optional[int] = None
     buffer_after: Optional[int] = None
+    staff_ids: Optional[List[UUID4]] = None  # List of staff member IDs to assign to this service
 
 
 class CompanyCategoryBase(BaseModel):

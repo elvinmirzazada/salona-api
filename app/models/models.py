@@ -262,6 +262,24 @@ class CategoryServices(BaseModel):
 
     company_category = relationship("CompanyCategories", back_populates="category_service")
     booking_category_services = relationship("BookingServices", back_populates="category_service")
+    service_staff = relationship("ServiceStaff", back_populates="service")
+
+
+class ServiceStaff(BaseModel):
+    __tablename__ = "service_staff"
+
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
+    service_id = Column(UUID, ForeignKey("category_services.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    service = relationship("CategoryServices", back_populates="service_staff")
+    user = relationship("Users")
+
+    __table_args__ = (
+        UniqueConstraint('service_id', 'user_id', name='_service_user_uc'),
+    )
 
 
 class BookingServices(BaseModel):

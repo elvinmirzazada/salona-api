@@ -3,9 +3,9 @@ from collections import defaultdict
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
 
-from app.models.models import CategoryServices, CompanyCategories
+from app.models.models import CategoryServices, CompanyCategories, ServiceStaff, Users
 from app.schemas import CategoryServiceResponse, CompanyCategoryCreate, CompanyCategoryUpdate, CategoryServiceCreate, \
-    CategoryServiceUpdate
+    CategoryServiceUpdate, StaffMember
 from app.schemas.schemas import CompanyCategoryWithServicesResponse
 
 
@@ -46,7 +46,7 @@ def get_service(db: Session, service_id: str, company_id: str) -> Optional[Categ
 
 def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWithServicesResponse]:
     """
-    Get all services for a company grouped by category
+    Get all services for a company grouped by category with assigned staff
     Returns a dictionary where keys are categories and values are lists of services
     """
     # Get all services for the company
@@ -56,6 +56,19 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
     ).all())
     comp_categories = defaultdict(list)
     for service in services:
+        # Get assigned staff for this service
+        staff_members = get_service_staff(db, service[2].id)
+        assigned_staff = [
+            StaffMember(
+                id=staff.id,
+                first_name=staff.first_name,
+                last_name=staff.last_name,
+                email=staff.email,
+                phone=staff.phone
+            )
+            for staff in staff_members
+        ]
+
         comp_categories[(service[0], service[1], service[3])].append(CategoryServiceResponse(
             id=service[2].id,
             name=service[2].name,
@@ -63,7 +76,10 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
             discount_price=service[2].discount_price,
             price=service[2].price,
             additional_info=service[2].additional_info,
-            status=service[2].status
+            status=service[2].status,
+            buffer_before=service[2].buffer_before,
+            buffer_after=service[2].buffer_after,
+            assigned_staff=assigned_staff
         ))
 
     result = []
@@ -154,6 +170,11 @@ def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServic
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
+
+    # Assign staff members to the service
+    if obj_in.staff_ids:
+        assign_staff_to_service(db, db_obj.id, obj_in.staff_ids)
+
     return db_obj
 
 
@@ -162,31 +183,73 @@ def update_service(db: Session, db_obj: CategoryServices, obj_in: CategoryServic
     Update an existing service
     """
     update_data = obj_in.model_dump(exclude_unset=True)
+
+    # Handle staff_ids separately
+    staff_ids = update_data.pop('staff_ids', None)
+
     for field, value in update_data.items():
         setattr(db_obj, field, value)
 
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
+
+    # Update staff assignments if provided
+    if staff_ids is not None:
+        # Remove existing assignments
+        db.query(ServiceStaff).filter(ServiceStaff.service_id == db_obj.id).delete()
+        db.commit()
+
+        # Add new assignments
+        if staff_ids:
+            assign_staff_to_service(db, db_obj.id, staff_ids)
+
     return db_obj
 
 
-def delete_service(db: Session, service_id: str, company_id: str) -> bool:
+def assign_staff_to_service(db: Session, service_id: UUID4, staff_ids: List[UUID4]) -> None:
     """
-    Delete a service
-    Verifies that the service belongs to a category that belongs to the specified company
+    Assign multiple staff members to a service
     """
-    # Join with company category to ensure the service belongs to this company
-    db_obj = (db.query(CategoryServices)
-              .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
-              .filter(
-                CategoryServices.id == service_id,
-                CompanyCategories.company_id == company_id
-              ).first())
+    for staff_id in staff_ids:
+        # Check if assignment already exists
+        existing = db.query(ServiceStaff).filter(
+            ServiceStaff.service_id == service_id,
+            ServiceStaff.user_id == staff_id
+        ).first()
 
-    if not db_obj:
-        return False
+        if not existing:
+            staff_assignment = ServiceStaff(
+                service_id=service_id,
+                user_id=staff_id
+            )
+            db.add(staff_assignment)
 
-    db.delete(db_obj)
     db.commit()
-    return True
+
+
+def get_service_staff(db: Session, service_id: UUID4) -> List[Users]:
+    """
+    Get all staff members assigned to a service
+    """
+    staff = (db.query(Users)
+             .join(ServiceStaff, ServiceStaff.user_id == Users.id)
+             .filter(ServiceStaff.service_id == service_id)
+             .all())
+    return staff
+
+
+def remove_staff_from_service(db: Session, service_id: UUID4, staff_id: UUID4) -> bool:
+    """
+    Remove a staff member from a service
+    """
+    assignment = db.query(ServiceStaff).filter(
+        ServiceStaff.service_id == service_id,
+        ServiceStaff.user_id == staff_id
+    ).first()
+
+    if assignment:
+        db.delete(assignment)
+        db.commit()
+        return True
+    return False
