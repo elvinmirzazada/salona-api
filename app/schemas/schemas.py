@@ -133,7 +133,7 @@ class GuestCustomerInfo(BaseModel):
 
 class BookingServiceRequest(BaseModel):
     category_service_id: UUID4
-    user_id: UUID4
+    user_id: Optional[UUID4] = None
     notes: Optional[str] = None
 
 class BookingCreate(BaseModel):
@@ -187,7 +187,7 @@ class BookingService(TimestampedModel):
     end_date: Optional[datetime] = None
 
     category_service: Optional[CategoryServiceResponse] = None
-    # assigned_user: Optional[CompanyUser] = None
+    assigned_staff: Optional[User] = None  # Changed from assigned_staff to match the model relationship
 
 
 class Booking(BookingBase, TimestampedModel):
@@ -353,6 +353,22 @@ class CompanyPhoneCreate(BaseModel):
     company_id: Optional[str] = None
 
 class CompanyPhone(CompanyPhoneBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    company_id: UUID4
+
+
+# Company Address schemas
+class CompanyAddressBase(BaseModel):
+    address: str
+    city: str
+    zip: Optional[str] = None
+    country: str
+    is_primary: bool = False
+
+
+class CompanyAddressResponse(CompanyAddressBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID4

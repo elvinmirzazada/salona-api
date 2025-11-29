@@ -46,8 +46,8 @@ async def create_booking(
     # if credentials:
     #     customer = get_current_customer(credentials=credentials, db=db)
 
-    publish_event('booking_created',
-                  str({'info': f"TEST"}))
+    # publish_event('booking_created',
+    #               str({'info': f"TEST"}))
 
     # If no valid customer found, create a new inactive one
     if not customer:
@@ -118,18 +118,19 @@ async def create_booking(
             )
 
         # Verify that the user(worker) exists and belongs to the company
-        selected_user = crud_user.get(db=db, id=selected_company_service.user_id)
-        if not selected_user:
-            response.status_code = status.HTTP_404_NOT_FOUND
-            raise DataResponse.error_response(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="User not found or doesn't belong to this company"
-            )
+        if selected_company_service.user_id:
+            selected_user = crud_user.get(db=db, id=selected_company_service.user_id)
+            if not selected_user:
+                response.status_code = status.HTTP_404_NOT_FOUND
+                raise DataResponse.error_response(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message="User not found or doesn't belong to this company"
+                )
 
     try:
         booking = crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
         response.status_code = status.HTTP_201_CREATED
-        publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
+        # publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
 
         # Create confirmation notification for the assigned staff member
         res = notification_service.create_notification(
@@ -333,6 +334,7 @@ async def create_booking_by_user(
             )
         )
         db.commit()
+        booking = Booking.model_validate(booking)
         return DataResponse.success_response(
             message="",
             data=booking,

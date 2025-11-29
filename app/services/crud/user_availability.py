@@ -62,9 +62,10 @@ def get_daily_slots(target_date: date, availabilities: List[UserAvailabilities],
     day_availabilities = [a for a in availabilities if a.day_of_week == day_of_week]
     # Collect intervals to subtract (bookings and time-offs)
     subtract_intervals_list = []
-    for time_off in time_offs:
-        if time_off.start_date <= target_date <= time_off.end_date:
-            subtract_intervals_list.append((time(0,0), time(23,59)))
+    for time_off, user_id in time_offs:
+        if time_off.start_date.date() <= target_date <= time_off.end_date.date():
+            subtract_intervals_list.append((time(time_off.start_date.hour,time_off.start_date.minute),
+                                            time(time_off.end_date.hour,time_off.end_date.minute)))
     for booking in bookings:
         if booking.start_at.date() == target_date:
             subtract_intervals_list.append((booking.start_at.time(), booking.end_at.time()))

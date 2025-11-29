@@ -32,6 +32,7 @@ class Users(BaseModel):
 
     company_user = relationship("CompanyUsers", back_populates="user")
     user_time_offs = relationship("UserTimeOffs", back_populates="user")
+    booked_services = relationship("BookingServices", back_populates="assigned_staff")
 
 
 class UserVerifications(BaseModel):
@@ -297,6 +298,7 @@ class BookingServices(BaseModel):
 
     booking = relationship("Bookings", back_populates="booking_services")
     category_service = relationship("CategoryServices", back_populates="booking_category_services")
+    assigned_staff = relationship("Users", back_populates="booked_services")
 
 
 

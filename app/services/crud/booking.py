@@ -12,6 +12,7 @@ from app.schemas import BookingServiceRequest
 from app.schemas.schemas import BookingCreate, BookingUpdate
 from app.services.crud import service
 from app.core.redis_client import publish_event
+from app.services.crud.company import get_company_users
 
 
 def get(db: Session, id: UUID4) -> Optional[Bookings]:
@@ -72,6 +73,8 @@ def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Booking
 
     start_time = obj_in.start_time
     for srv in obj_in.services:
+        if not srv.user_id:
+            srv.user_id = get_company_users(db, str(obj_in.company_id))[0].user_id
         duration, _ = calc_service_params(db, [srv], obj_in.company_id)
         db_service_obj = BookingServices(
             booking_id=db_obj.id,

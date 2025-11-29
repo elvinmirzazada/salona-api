@@ -13,12 +13,15 @@ from app.api.dependencies import (
     get_current_user_role
 )
 from app.db.session import get_db
+from app.models import CompanyAddresses
 from app.models.models import Users, CompanyUsers
 from app.models.enums import CompanyRoleType, StatusType, InvitationStatus
-from app.schemas import CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, \
-    CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate, \
-    CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate, \
-    Invitation, InvitationCreate, InvitationAccept
+from app.schemas import (
+    CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser,
+    CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate,
+    CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate,
+    Invitation, InvitationCreate, InvitationAccept, CompanyAddressResponse
+)
 from app.schemas.responses import DataResponse
 from app.services.crud import company as crud_company
 from app.services.crud import customer as crud_customer
@@ -351,6 +354,42 @@ async def get_company(
     return DataResponse.success_response(
         data=company
     )
+
+@router.get("/{company_id}/address", response_model=DataResponse[CompanyAddressResponse])
+async def get_company_address(
+    *,
+    db: Session = Depends(get_db),
+    company_id: str
+) -> DataResponse:
+    """
+    Get the company's address by company_id.
+    """
+    try:
+        address = db.query(CompanyAddresses).filter(
+            CompanyAddresses.company_id == company_id
+        ).first()
+
+        if not address:
+            return DataResponse.error_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Company address not found"
+            )
+
+        # Convert ORM object to Pydantic response schema
+        address_response = CompanyAddressResponse.model_validate(address)
+
+        return DataResponse.success_response(
+            data=address_response,
+            message="Company address retrieved successfully",
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to retrieve company address: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
 
 @router.put("", response_model=DataResponse[Company])
 async def update_company(
