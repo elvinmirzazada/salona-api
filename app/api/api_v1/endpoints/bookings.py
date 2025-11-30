@@ -298,6 +298,9 @@ async def create_booking_by_user(
             message="Cannot create booking in the past"
         )
 
+    # Calculate the start and end time for each service to check staff availability
+    current_start_time = booking_in.start_time
+
     for selected_company_service in booking_in.services:
         # Verify that the service exists and belongs to the company
         company_service = crud_service.get_service(db=db, service_id=selected_company_service.category_service_id,
@@ -318,6 +321,27 @@ async def create_booking_by_user(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="User not found or doesn't belong to this company"
             )
+
+        # Calculate end time for this service
+        service_end_time = current_start_time + timedelta(minutes=company_service.duration)
+
+        # Check if the staff member is available for this service time slot
+        is_available, conflict_message = crud_booking.check_staff_availability(
+            db=db,
+            user_id=selected_company_service.user_id,
+            start_time=current_start_time,
+            end_time=service_end_time
+        )
+
+        if not is_available:
+            response.status_code = status.HTTP_409_CONFLICT
+            return DataResponse.error_response(
+                status_code=status.HTTP_409_CONFLICT,
+                message=conflict_message
+            )
+
+        # Move to the next service start time
+        current_start_time = service_end_time
 
     try:
         booking = crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
