@@ -90,7 +90,7 @@ def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Booking
     db.commit()
     db.refresh(db_obj)
     # Publish booking created event
-    publish_event("booking_created", str(db_obj.id))
+    # publish_event("booking_created", str(db_obj.id))
     return db_obj
 
 

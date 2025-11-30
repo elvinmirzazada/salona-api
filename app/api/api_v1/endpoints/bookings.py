@@ -322,7 +322,7 @@ async def create_booking_by_user(
     try:
         booking = crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
         response.status_code = status.HTTP_201_CREATED
-        await publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
+        # await publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
 
         # Create confirmation notification for the assigned staff member
         res = notification_service.create_notification(

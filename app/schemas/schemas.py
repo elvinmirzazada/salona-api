@@ -151,7 +151,40 @@ class BookingUpdate(BaseModel):
     services: Optional[List[BookingServiceRequest]] = None
 
 
+class ServiceStaff(BaseModel):
+    """Schema for the service_staff junction table linking services to staff members"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    service_id: UUID4
+    user_id: UUID4
+    created_at: datetime
+    updated_at: datetime
+
+    # Optional nested user information
+    user: Optional['User'] = None
+
+
+class ServiceStaffCreate(BaseModel):
+    """Schema for creating service-staff assignments"""
+    service_id: UUID4
+    user_id: UUID4
+
+
+class ServiceStaffResponse(BaseModel):
+    """Simplified response schema for staff assigned to a service"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    first_name: str
+    last_name: str
+    email: str
+    phone: str
+
+
 class CategoryServiceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID4
     name: str
     duration: int
@@ -161,11 +194,11 @@ class CategoryServiceResponse(BaseModel):
     additional_info: Optional[str] = None
     buffer_before: Optional[int] = 0
     buffer_after: Optional[int] = 0
-    assigned_staff: Optional[List['StaffMember']] = []  # List of staff assigned to this service
+    service_staff: Optional[List['ServiceStaff']] = []  # List of staff assigned to this service
 
 
 class StaffMember(BaseModel):
-    """Simple staff member schema for service assignments"""
+    """Simple staff member schema for booking assignments"""
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID4
