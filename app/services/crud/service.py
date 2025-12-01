@@ -58,16 +58,16 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
     for service in services:
         # Get assigned staff for this service
         staff_members = get_service_staff(db, service[2].id)
-        assigned_staff = [
-            StaffMember(
-                id=staff.id,
-                first_name=staff.first_name,
-                last_name=staff.last_name,
-                email=staff.email,
-                phone=staff.phone
-            )
-            for staff in staff_members
-        ]
+        # service_staff = [
+        #     ServiceStaff(
+        #         id=staff.id,
+        #         first_name=staff.first_name,
+        #         last_name=staff.last_name,
+        #         email=staff.email,
+        #         phone=staff.phone
+        #     )
+        #     for staff in staff_members
+        # ]
 
         comp_categories[(service[0], service[1], service[3])].append(CategoryServiceResponse(
             id=service[2].id,
@@ -79,7 +79,7 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
             status=service[2].status,
             buffer_before=service[2].buffer_before,
             buffer_after=service[2].buffer_after,
-            assigned_staff=assigned_staff
+            service_staff=staff_members
         ))
 
     result = []
@@ -159,8 +159,8 @@ def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServic
         category_id=obj_in.category_id,
         name=obj_in.name,
         duration=obj_in.duration,
-        price=obj_in.price,
-        discount_price=obj_in.discount_price,
+        price=int(obj_in.price),
+        discount_price=int(obj_in.discount_price),
         additional_info=obj_in.additional_info,
         status=obj_in.status,
         buffer_before=obj_in.buffer_before,
@@ -228,12 +228,11 @@ def assign_staff_to_service(db: Session, service_id: UUID4, staff_ids: List[UUID
     db.commit()
 
 
-def get_service_staff(db: Session, service_id: UUID4) -> List[Users]:
+def get_service_staff(db: Session, service_id: UUID4) -> List[ServiceStaff]:
     """
     Get all staff members assigned to a service
     """
-    staff = (db.query(Users)
-             .join(ServiceStaff, ServiceStaff.user_id == Users.id)
+    staff = (db.query(ServiceStaff)
              .filter(ServiceStaff.service_id == service_id)
              .all())
     return staff

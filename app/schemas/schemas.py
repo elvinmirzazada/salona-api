@@ -299,7 +299,7 @@ class CategoryServiceBase(BaseModel):
 
 class CategoryServiceCreate(CategoryServiceBase):
     category_id: str
-    staff_ids: Optional[List[UUID4]] = []  # List of staff member IDs to assign to this service
+    staff_ids: List[UUID4] = []  # List of staff member IDs to assign to this service
 
 class CategoryServiceUpdate(BaseModel):
     name: Optional[str] = None

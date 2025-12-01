@@ -254,9 +254,6 @@ async def get_company_services(
     services = crud_service.get_company_services(
         db=db, company_id=company_id
     )
-    from app.core.redis_client import publish_event
-    await publish_event('booking_created',
-                        str({'info': f"A new booking has been created"}))
 
     return DataResponse.success_response(
         data=services,
