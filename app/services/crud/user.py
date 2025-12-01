@@ -10,7 +10,7 @@ from app.models.models import Users, UserVerifications
 from app.models.enums import VerificationStatus
 from app.schemas import CompanyUser, User
 from app.schemas.schemas import (
-    UserCreate
+    UserCreate, UserUpdate
 )
 
 
@@ -29,6 +29,25 @@ def get_by_email(db: Session, email: str) -> Optional[Users]:
 def create(db: Session, *, obj_in: UserCreate) -> Users:
     db_obj = Users(**obj_in.model_dump())
     db_obj.id = str(uuid.uuid4())
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+
+def update(db: Session, *, db_obj: Users, obj_in: UserUpdate) -> Users:
+    """Update user information"""
+    update_data = obj_in.model_dump(exclude_unset=True)
+
+    # If email is being updated, check if it's already in use by another user
+    if 'email' in update_data and update_data['email']:
+        existing_user = get_by_email(db, email=update_data['email'])
+        if existing_user and existing_user.id != db_obj.id:
+            raise ValueError("Email is already in use by another user")
+
+    for field, value in update_data.items():
+        setattr(db_obj, field, value)
+
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)

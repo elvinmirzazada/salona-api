@@ -15,7 +15,7 @@ from app.schemas.auth import (
     GoogleAuthorizationResponse, GoogleCallbackRequest, GoogleOAuthResponse
 )
 from app.schemas.responses import DataResponse
-from app.schemas.schemas import ResponseMessage, TimeOffCreate, TimeOff, TimeOffUpdate
+from app.schemas.schemas import ResponseMessage, TimeOffCreate, TimeOff, TimeOffUpdate, UserUpdate
 from app.schemas.schemas import UserCreate
 from app.services.auth import hash_password, verify_password, create_token_pair, verify_token
 from app.services.crud import user as crud_user
@@ -268,6 +268,48 @@ async def get_current_user(
     # Return basic user if no company association - convert SQLAlchemy model to Pydantic schema
     user_schema = User.model_validate(current_user)
     return DataResponse.success_response(data=user_schema)
+
+
+@router.put("/me", response_model=DataResponse[User], status_code=status.HTTP_200_OK)
+async def update_current_user(
+    *,
+    db: Session = Depends(get_db),
+    user_in: UserUpdate,
+    response: Response,
+    current_user: Users = Depends(get_current_active_user)
+) -> DataResponse:
+    """
+    Update current user's information (first_name, last_name, email, phone).
+    """
+    try:
+        # Update the user
+        updated_user = crud_user.update(
+            db=db,
+            db_obj=current_user,
+            obj_in=user_in
+        )
+
+        # Convert to Pydantic schema for response
+        user_schema = User.model_validate(updated_user)
+
+        return DataResponse.success_response(
+            message="User information updated successfully",
+            data=user_schema,
+            status_code=status.HTTP_200_OK
+        )
+    except ValueError as e:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        db.rollback()
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to update user information: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @router.post("/time-offs", response_model=DataResponse[TimeOff], status_code=status.HTTP_201_CREATED)

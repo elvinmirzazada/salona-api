@@ -333,7 +333,7 @@ async def get_company(
 
 
 @router.get("/{company_id}", response_model=DataResponse[Company])
-async def get_company(
+async def get_company_by_id(
     *,
     db: Session = Depends(get_db),
     company_id: str
@@ -453,7 +453,7 @@ async def add_company_email(
         )
 
 
-@router.get("/emails", response_model=DataResponse[List[CompanyEmail]])
+@router.get("/all/emails", response_model=DataResponse[List[CompanyEmail]])
 async def get_company_emails(
     *,
     db: Session = Depends(get_db),
@@ -527,7 +527,7 @@ async def add_company_phone(
         )
 
 
-@router.get("/phones", response_model=DataResponse[List[CompanyPhone]])
+@router.get("/all/phones", response_model=DataResponse[List[CompanyPhone]])
 async def get_company_phones(
     *,
     db: Session = Depends(get_db),
