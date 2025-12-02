@@ -132,6 +132,7 @@ async def delete_notification(
     *,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
+    company_id = Depends(get_current_company_id),
     notification_id: UUID4
 ) -> DataResponse[dict]:
     """
@@ -146,7 +147,7 @@ async def delete_notification(
             detail="Notification not found"
         )
     
-    if existing_notification.user_id != current_user.id:
+    if str(existing_notification.company_id) != company_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied"
@@ -188,18 +189,17 @@ async def mark_notifications_as_read(
     )
 
 
-@router.patch("/mark-all-as-read", response_model=DataResponse[dict])
+@router.patch("/mark-all/as-read", response_model=DataResponse[dict])
 async def mark_all_notifications_as_read(
-    *,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    company_id = Depends(get_current_company_id)
 ) -> DataResponse[dict]:
     """
     Mark all notifications as read for the current user
     """
     count = crud_notification.mark_all_notifications_as_read(
         db=db,
-        user_id=current_user.id
+        company_id=company_id
     )
     
     return DataResponse.success_response(

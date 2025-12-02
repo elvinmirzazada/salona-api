@@ -288,10 +288,10 @@ async def update_current_user(
             db_obj=current_user,
             obj_in=user_in
         )
-
+        
         # Convert to Pydantic schema for response
         user_schema = User.model_validate(updated_user)
-
+        
         return DataResponse.success_response(
             message="User information updated successfully",
             data=user_schema,

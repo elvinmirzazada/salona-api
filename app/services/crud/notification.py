@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 from pydantic import UUID4
 
+from app.models import NotificationStatus
 from app.models.models import CompanyNotifications
 from app.schemas import NotificationCreate, NotificationUpdate, Notification
 from app.schemas.responses import PaginationInfo
@@ -27,14 +28,16 @@ def get_user_notifications(
     company_id: UUID4,
     page: int = 1, 
     per_page: int = 20,
-    status_filter: Optional[str] = None
+    status_filter=None
 ) -> tuple[List[Notification], PaginationInfo]:
     """Get paginated notifications for a user"""
+    if status_filter is None:
+        status_filter = ['unread', 'read']
     query = db.query(CompanyNotifications).filter(CompanyNotifications.company_id == company_id)
     
     # Apply status filter if provided
     if status_filter:
-        query = query.filter(CompanyNotifications.status == status_filter)
+        query = query.filter(CompanyNotifications.status.in_(status_filter))
     
     # Order by created_at descending (newest first)
     query = query.order_by(CompanyNotifications.created_at.desc())
@@ -76,17 +79,15 @@ def update_notification(
 
 def delete_notification(db: Session, notification_id: UUID4) -> bool:
     """Delete a notification"""
-    db_notification = db.query(CompanyNotifications).filter(CompanyNotifications.id == notification_id).first()
-    if db_notification:
-        db.delete(db_notification)
-        db.commit()
-        return True
-    return False
+    db.query(CompanyNotifications).filter(CompanyNotifications.id == notification_id).update(
+        {'status': NotificationStatus.ARCHIVED}, synchronize_session=False
+    )
+    db.commit()
+    return True
 
 
-def mark_notifications_as_read(db: Session, company_id: UUID4, notification_ids: List[UUID4]) -> int:
+def mark_notifications_as_read(db: Session, company_id: UUID4, notification_ids: List[str]) -> int:
     """Mark multiple notifications as read"""
-    from app.models.enums import NotificationStatus
     
     count = db.query(CompanyNotifications).filter(
         and_(
@@ -99,13 +100,13 @@ def mark_notifications_as_read(db: Session, company_id: UUID4, notification_ids:
     return count
 
 
-def mark_all_notifications_as_read(db: Session, user_id: UUID4) -> int:
+def mark_all_notifications_as_read(db: Session, company_id: UUID4) -> int:
     """Mark all notifications as read for a user"""
     from app.models.enums import NotificationStatus
     
     count = db.query(CompanyNotifications).filter(
         and_(
-            CompanyNotifications.user_id == user_id,
+            CompanyNotifications.company_id == company_id,
             CompanyNotifications.status == NotificationStatus.UNREAD
         )
     ).update({"status": NotificationStatus.READ}, synchronize_session=False)

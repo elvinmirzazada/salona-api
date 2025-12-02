@@ -50,14 +50,14 @@ def get_all_bookings_in_range_by_company(db: Session, company_id: str, start_dat
 def check_staff_availability(db: Session, user_id: UUID4, start_time: datetime, end_time: datetime, exclude_booking_id: Optional[UUID4] = None) -> tuple[bool, Optional[str]]:
     """
     Check if a staff member is available during the requested time period.
-
+    
     Args:
         db: Database session
         user_id: The staff member's user ID
         start_time: Start time of the requested booking
         end_time: End time of the requested booking
         exclude_booking_id: Optional booking ID to exclude from the check (for updates)
-
+    
     Returns:
         Tuple of (is_available: bool, conflict_message: Optional[str])
     """
@@ -69,18 +69,18 @@ def check_staff_availability(db: Session, user_id: UUID4, start_time: datetime, 
         BookingServices.start_at < end_time,
         BookingServices.end_at > start_time
     )
-
+    
     # Exclude the current booking if updating
     if exclude_booking_id:
         query = query.filter(Bookings.id != exclude_booking_id)
-
+    
     conflicting_bookings = query.all()
-
+    
     if conflicting_bookings:
         conflict = conflicting_bookings[0]
         conflict_message = f"Staff member is not available. There is a conflicting booking from {conflict.start_at.strftime('%H:%M')} to {conflict.end_at.strftime('%H:%M')}"
         return False, conflict_message
-
+    
     return True, None
 
 
