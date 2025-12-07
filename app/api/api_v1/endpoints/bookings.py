@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, timezone, date, timedelta
 from typing import List, Optional
 
@@ -9,6 +10,7 @@ from app.db.session import get_db
 from app.core.redis_client import publish_event
 from app.schemas import CompanyNotificationCreate
 from app.services.notification_service import notification_service
+from app.services.email_service import email_service
 from app.schemas.schemas import Booking, BookingCreate, BookingUpdate, AvailabilityResponse, CustomerCreate
 from app.services.crud import booking as crud_booking
 from app.services.crud import service as crud_service
@@ -105,7 +107,7 @@ async def create_booking(
             status_code=status.HTTP_400_BAD_REQUEST,
             message="Cannot create booking in the past"
         )
-
+    selected_company_users = defaultdict(list)
     for selected_company_service in booking_in.services:
         # Verify that the service exists and belongs to the company
         company_service = crud_service.get_service(db=db, service_id=selected_company_service.category_service_id,
@@ -126,6 +128,7 @@ async def create_booking(
                     status_code=status.HTTP_404_NOT_FOUND,
                     message="User not found or doesn't belong to this company"
                 )
+            selected_company_users[selected_user[0].id].append((selected_user[0], company_service))
 
     try:
         booking = crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
@@ -133,7 +136,7 @@ async def create_booking(
         # publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
 
         # Create confirmation notification for the assigned staff member
-        res = notification_service.create_notification(
+        _ = notification_service.create_notification(
             db=db,
             notification_request=CompanyNotificationCreate(
                 company_id=booking_in.company_id,
@@ -141,6 +144,24 @@ async def create_booking(
                 message=f"A new booking has been created by {customer.first_name} {customer.last_name}"
             )
         )
+
+        for user_id, item in selected_company_users.items():
+            selected_service_names = []
+            company_user = item[0][0]
+            for user, company_service in item:
+                selected_service_names.append(company_service.name)
+            # Send email notification to assigned staff member
+            _ = email_service.send_booking_notification_email(
+                to_email=company_user.email,
+                staff_name=company_user.first_name,
+                customer_name=booking_in.customer_info.first_name + ' ' + booking_in.customer_info.last_name,
+                company_name=selected_company.name,
+                booking_date=booking.start_at.isoformat(),
+                services=selected_service_names,
+                booking_notes=booking_in.notes
+            )
+
+
         db.commit()
         return DataResponse.success_response(
             message="",
@@ -357,7 +378,6 @@ async def create_booking_by_user(
                 message=f"A new booking has been created by {customer.first_name} {customer.last_name}"
             )
         )
-        db.commit()
         booking = Booking.model_validate(booking)
         return DataResponse.success_response(
             message="",

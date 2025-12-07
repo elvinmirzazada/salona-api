@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import UUID4
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -48,7 +48,7 @@ def create_invitation(
             # Update the existing invitation
             existing.token = token
             existing.role = role
-            existing.updated_at = datetime.now()
+            existing.updated_at = datetime.now(timezone.utc)
             db.add(existing)
             db.commit()
             db.refresh(existing)
@@ -100,7 +100,7 @@ def get_invitation_by_token(db: Session, token: str) -> Optional[Invitations]:
         # Check if invitation has expired (older than 3 days)
         if invitation:
             expires_at = invitation.created_at + timedelta(days=3)
-            if datetime.now() > expires_at:
+            if datetime.now(timezone.utc) > expires_at:
                 invitation.status = InvitationStatus.EXPIRED
                 db.add(invitation)
                 db.commit()
@@ -191,7 +191,7 @@ def accept_invitation(
     try:
         # Update invitation status
         invitation.status = InvitationStatus.USED
-        invitation.updated_at = datetime.now()
+        invitation.updated_at = datetime.now(timezone.utc)
         db.add(invitation)
 
         # Check if user is already a company member
@@ -248,7 +248,7 @@ def decline_invitation(db: Session, token: str) -> bool:
             return False
 
         invitation.status = InvitationStatus.DECLINED
-        invitation.updated_at = datetime.now()
+        invitation.updated_at = datetime.now(timezone.utc)
         db.add(invitation)
         db.commit()
         return True
@@ -287,8 +287,8 @@ def resend_invitation(
         # Generate new token and reset to pending
         invitation.token = str(uuid.uuid4())
         invitation.status = InvitationStatus.PENDING
-        invitation.created_at = datetime.now()
-        invitation.updated_at = datetime.now()
+        invitation.created_at = datetime.now(timezone.utc)
+        invitation.updated_at = datetime.now(timezone.utc)
 
         db.add(invitation)
         db.commit()

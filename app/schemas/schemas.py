@@ -1,6 +1,7 @@
-from datetime import datetime, date, time
-from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict, UUID4
+from datetime import datetime, date, time, timezone
+from decimal import Decimal
+from typing import Optional, List, Annotated
+from pydantic import BaseModel, Field, field_validator, ConfigDict, UUID4, EmailStr
 
 from app.models import CustomerStatusType, CompanyCategories
 from app.models.enums import GenderType, StatusType, PriceType, SourceType, BookingStatus, AvailabilityType, EmailStatusType, PhoneStatusType, NotificationType, NotificationStatus, CompanyRoleType
@@ -413,7 +414,7 @@ class NotificationBase(BaseModel):
     message: str
     data: Optional[str] = None
     status: NotificationStatus = NotificationStatus.UNREAD
-    created_at: datetime = datetime.now()
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class NotificationCreate(NotificationBase):

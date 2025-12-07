@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
@@ -81,7 +81,7 @@ class CompanyMembershipCRUD:
             db.add(membership)
 
         # Calculate end date
-        start_date = datetime.now()
+        start_date = datetime.now(timezone.utc)
         end_date = start_date + timedelta(days=int(str(plan.duration_days)))
 
         db_obj = CompanyMemberships(
@@ -106,7 +106,7 @@ class CompanyMembershipCRUD:
         return db.query(CompanyMemberships).filter(
             CompanyMemberships.company_id == company_id,
             CompanyMemberships.status == StatusType.active,
-            CompanyMemberships.end_date > datetime.now()
+            CompanyMemberships.end_date > datetime.now(timezone.utc)
         ).first()
 
     def get_company_memberships(self, db: Session, *, company_id: str, skip: int = 0, limit: int = 100) -> List[CompanyMemberships]:

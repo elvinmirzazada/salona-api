@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
@@ -66,7 +66,7 @@ def verify_token(db: Session, db_obj: UserVerifications) -> bool:
     """Mark verification token as verified and update user email_verified status"""
     try:
         db_obj.status = VerificationStatus.VERIFIED
-        db_obj.used_at = datetime.now()
+        db_obj.used_at = datetime.now(timezone.utc)
 
         # Update user's email_verified status
         user = db.query(Users).filter(Users.id == db_obj.user_id).first()

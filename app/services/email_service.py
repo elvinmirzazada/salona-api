@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 from sqlalchemy.orm import Session
 from sendgrid import SendGridAPIClient
@@ -376,6 +376,145 @@ class EmailService:
 
         return self._send_email(to_email, subject, html_content, text_content)
 
+    def send_booking_notification_email(
+        self,
+        to_email: str,
+        staff_name: str,
+        customer_name: str,
+        company_name: str,
+        booking_date: str,
+        services: list,
+        booking_notes: Optional[str] = None
+    ) -> bool:
+        """
+        Send booking notification email to staff members
+
+        Args:
+            to_email: Staff member's email address
+            staff_name: Staff member's name
+            customer_name: Customer's name who made the booking
+            company_name: Company name
+            booking_date: Date of the booking (formatted string)
+            services: List of service names for the booking
+            booking_notes: Optional notes from the customer
+
+        Returns:
+            bool: True if email sent successfully
+        """
+        subject = f"New Booking Notification - {company_name}"
+
+        # Format services list for display
+        services_html = ""
+        if services:
+            services_html = "<ul style='margin: 10px 0; padding-left: 20px;'>"
+            for service in services:
+                services_html += f"<li style='margin: 5px 0;'>{service}</li>"
+            services_html += "</ul>"
+
+        # Add notes section if provided
+        notes_html = ""
+        if booking_notes:
+            notes_html = f"""
+            <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                <strong style="color: #856404;">Customer Notes:</strong>
+                <p style="margin: 10px 0 0 0; color: #856404;">{booking_notes}</p>
+            </div>
+            """
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px;">
+                <h1 style="color: #2c3e50; margin-bottom: 20px;">New Booking Notification</h1>
+                
+                <p>Hi {staff_name},</p>
+                
+                <p>You have a new booking appointment scheduled at <strong>{company_name}</strong>.</p>
+                
+                <div style="background-color: white; padding: 20px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <h2 style="color: #007bff; margin-top: 0; font-size: 18px;">Booking Details</h2>
+                    
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef;">
+                                <strong>Customer:</strong>
+                            </td>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; text-align: right;">
+                                {customer_name}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef;">
+                                <strong>Date:</strong>
+                            </td>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; text-align: right;">
+                                {booking_date}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0;" colspan="2">
+                                <strong>Services:</strong>
+                                {services_html}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                
+                {notes_html}
+                
+                <p style="color: #28a745; font-weight: bold;">Please make sure you're available at the scheduled time.</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{settings.FRONTEND_URL}/bookings" 
+                       style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                        View Booking
+                    </a>
+                </div>
+                
+                <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+                
+                <p style="color: #6c757d; font-size: 12px; text-align: center;">
+                    © {datetime.now().year} Salona. All rights reserved.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+
+        # Plain text version
+        services_text = "\n".join([f"  - {service}" for service in services]) if services else "  No services specified"
+        notes_text = f"\n\nCustomer Notes:\n{booking_notes}\n" if booking_notes else ""
+
+        text_content = f"""
+        New Booking Notification
+        
+        Hi {staff_name},
+        
+        You have a new booking appointment scheduled at {company_name}.
+        
+        Booking Details:
+        ----------------
+        Customer: {customer_name}
+        Date: {booking_date}
+        
+        Services:
+        {services_text}
+        {notes_text}
+        
+        Please make sure you're available at the scheduled time.
+        
+        View your bookings at: {settings.FRONTEND_URL}/bookings
+        
+        © {datetime.now().year} Salona. All rights reserved.
+        """
+
+        return self._send_email(to_email, subject, html_content, text_content)
+
 
 def create_verification_token(
     db: Session,
@@ -398,8 +537,8 @@ def create_verification_token(
         UserVerifications or CustomerVerifications: The created verification record
     """
     token = str(uuid.uuid4())
-    expires_at = datetime.now() + timedelta(hours=expires_in_hours)
-    
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+
     if entity_type == "user":
         db_obj = UserVerifications(
             id=uuid.uuid4(),
