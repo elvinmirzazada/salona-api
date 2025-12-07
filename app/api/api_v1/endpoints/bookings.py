@@ -422,6 +422,9 @@ async def update_booking(
 
     # Validate services if provided
     if booking_update.services:
+        # Calculate start and end times for each service to check availability
+        current_start_time = booking_update.start_time if booking_update.start_time else existing_booking.start_at
+
         for service_request in booking_update.services:
             # Verify that the service exists and belongs to the company
             company_service = crud_service.get_service(
@@ -444,6 +447,58 @@ async def update_booking(
                     status_code=status.HTTP_404_NOT_FOUND,
                     message="User not found"
                 )
+
+            # Calculate end time for this service
+            service_end_time = current_start_time + timedelta(minutes=company_service.duration)
+
+            # Check if the staff member is available for this service time slot
+            is_available, conflict_message = crud_booking.check_staff_availability(
+                db=db,
+                user_id=service_request.user_id,
+                start_time=current_start_time,
+                end_time=service_end_time,
+                exclude_booking_id=booking_uuid  # Exclude current booking from availability check
+            )
+
+            if not is_available:
+                response.status_code = status.HTTP_409_CONFLICT
+                return DataResponse.error_response(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=conflict_message
+                )
+
+            # Move to the next service start time
+            current_start_time = service_end_time
+
+    # If only start_time is being updated (without services), check availability for existing services
+    elif booking_update.start_time is not None:
+        # Get existing booking services to check availability with new times
+        existing_services = db.query(BookingServices).filter(
+            BookingServices.booking_id == booking_uuid
+        ).order_by(BookingServices.start_at).all()
+
+        current_start_time = booking_update.start_time
+        for booking_service in existing_services:
+            # Calculate duration of this service
+            service_duration = booking_service.end_at - booking_service.start_at
+            service_end_time = current_start_time + service_duration
+
+            # Check if the staff member is available for the new time slot
+            is_available, conflict_message = crud_booking.check_staff_availability(
+                db=db,
+                user_id=booking_service.user_id,
+                start_time=current_start_time,
+                end_time=service_end_time,
+                exclude_booking_id=booking_uuid  # Exclude current booking from availability check
+            )
+
+            if not is_available:
+                response.status_code = status.HTTP_409_CONFLICT
+                return DataResponse.error_response(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=conflict_message
+                )
+
 
     try:
         updated_booking = crud_booking.update(

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, timezone
 from typing import List, Optional, Any
 from datetime import date, datetime
 
@@ -14,6 +14,16 @@ from app.schemas.schemas import BookingCreate, BookingUpdate
 from app.services.crud import service
 from app.core.redis_client import publish_event
 from app.services.crud.company import get_company_users
+
+
+def ensure_timezone_aware(dt: datetime) -> datetime:
+    """
+    Ensure a datetime is timezone-aware (UTC).
+    If it's naive, assume it's UTC and make it aware.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def get(db: Session, id: UUID4) -> Optional[Bookings]:
@@ -137,8 +147,6 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
     Update a booking and its associated services.
     """
     # Update basic booking fields
-    if obj_in.start_time is not None:
-        db_obj.start_at = obj_in.start_time
     if obj_in.notes is not None:
         db_obj.notes = obj_in.notes
     if obj_in.status is not None:
@@ -146,6 +154,10 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
 
     # If services are being updated, we need to recalculate everything
     if obj_in.services is not None:
+        # Update start time if provided
+        if obj_in.start_time is not None:
+            db_obj.start_at = obj_in.start_time
+
         # Remove existing booking services
         db.query(BookingServices).filter(BookingServices.booking_id == db_obj.id).delete()
 
@@ -154,7 +166,7 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
         db_obj.total_price = total_price
 
         # Update end time based on new start time and duration
-        start_time = obj_in.start_time if obj_in.start_time is not None else db_obj.start_at
+        start_time = db_obj.start_at
         db_obj.end_at = start_time + timedelta(minutes=total_duration)
 
         # Create new booking services
@@ -171,6 +183,41 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
             )
             current_start_time = db_service_obj.end_at
             db.add(db_service_obj)
+
+    # If only start_time is being updated (without services)
+    elif obj_in.start_time is not None:
+        # Get existing booking services
+        existing_services = db.query(BookingServices).filter(
+            BookingServices.booking_id == db_obj.id
+        ).order_by(BookingServices.start_at).all()
+
+        # Ensure timezone awareness before calculating time difference
+        new_start_time = ensure_timezone_aware(obj_in.start_time)
+        old_start_time = ensure_timezone_aware(db_obj.start_at)
+
+        # Calculate the time difference
+        time_diff = new_start_time - old_start_time
+
+        # Update booking start and end times
+        db_obj.start_at = new_start_time
+        db_obj.end_at = ensure_timezone_aware(db_obj.end_at) + time_diff
+
+        # Update all existing booking services with the new times
+        current_start_time = new_start_time
+        for booking_service in existing_services:
+            # Ensure timezone awareness for service times
+            service_start = ensure_timezone_aware(booking_service.start_at)
+            service_end = ensure_timezone_aware(booking_service.end_at)
+
+            # Calculate the duration of this service
+            service_duration = service_end - service_start
+
+            # Update the service times
+            booking_service.start_at = current_start_time
+            booking_service.end_at = current_start_time + service_duration
+
+            current_start_time = booking_service.end_at
+            db.add(booking_service)
 
     db.add(db_obj)
     db.commit()
