@@ -8,6 +8,7 @@ from pydantic.v1 import UUID4
 from app.models import CompanyUsers
 from app.models.models import UserTimeOffs
 from app.schemas.schemas import TimeOffCreate, TimeOffUpdate
+from app.core.datetime_utils import utcnow, ensure_utc
 
 
 def get_user_time_offs(
@@ -23,13 +24,16 @@ def get_user_time_offs(
              .filter(CompanyUsers.company_id == company_id))
     
     if start_date and end_date:
+        # Ensure dates are in UTC
+        start_date_utc = ensure_utc(start_date)
+        end_date_utc = ensure_utc(end_date)
         # Get time offs that overlap with the given date range
         query = query.filter(
-            UserTimeOffs.start_date <= end_date,
-            UserTimeOffs.end_date >= start_date
+            UserTimeOffs.start_date <= end_date_utc,
+            UserTimeOffs.end_date >= start_date_utc
         )
     
-    return list(query.all())
+    return query.all()
 
 
 def get(db: Session, time_off_id: UUID4) -> Optional[UserTimeOffs]:
@@ -48,7 +52,8 @@ def create(db: Session, *, obj_in: TimeOffCreate, company_id: Optional[str]) -> 
     # Validate that end_date is not before start_date
     if obj_in.end_date < obj_in.start_date:
         raise ValueError("End date cannot be before start date")
-    
+    start_date_utc = ensure_utc(obj_in.start_date)
+    end_date_utc = ensure_utc(obj_in.end_date)
     # Check if company_id is provided, validate user belongs to this company
     if company_id:
         company_user = db.query(CompanyUsers).filter(
@@ -62,16 +67,15 @@ def create(db: Session, *, obj_in: TimeOffCreate, company_id: Optional[str]) -> 
     db_obj = UserTimeOffs(
         # id=uuid.uuid4(),
         user_id=obj_in.user_id,
-        start_date=obj_in.start_date,
-        end_date=obj_in.end_date,
+        start_date=start_date_utc,
+        end_date=end_date_utc,
         reason=obj_in.reason
+
     )
-    
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
     return db_obj
-
 
 def update(db: Session, *, db_obj: UserTimeOffs, obj_in: TimeOffUpdate) -> UserTimeOffs:
     """
@@ -80,22 +84,22 @@ def update(db: Session, *, db_obj: UserTimeOffs, obj_in: TimeOffUpdate) -> UserT
     # Update fields if provided
     if obj_in.start_date is not None:
         db_obj.start_date = obj_in.start_date
-    
+    update_data = obj_in.model_dump(exclude_unset=True)
     if obj_in.end_date is not None:
         db_obj.end_date = obj_in.end_date
-    
+        update_data['end_date'] = ensure_utc(update_data['end_date'])
     if obj_in.reason is not None:
         db_obj.reason = obj_in.reason
     
     # Validate that end_date is not before start_date after updates
     if db_obj.end_date < db_obj.start_date:
         raise ValueError("End date cannot be before start date")
-    
+    db_obj.updated_at = utcnow()
+
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
     return db_obj
-
 
 def delete(db: Session, *, time_off_id: UUID4) -> bool:
     """

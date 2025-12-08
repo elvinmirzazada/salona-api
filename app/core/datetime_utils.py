@@ -16,6 +16,33 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def utcnow_iso() -> str:
+    """
+    Get current UTC datetime as ISO format string with Z suffix.
+
+    Returns:
+        str: Current UTC time in ISO format with Z (e.g., "2023-12-08T10:30:45Z")
+    """
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def to_utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    """
+    Convert a datetime to UTC ISO format string with Z suffix.
+
+    Args:
+        dt: Input datetime (can be naive or timezone-aware)
+
+    Returns:
+        str: UTC datetime in ISO format with Z, or None if input is None
+    """
+    if dt is None:
+        return None
+
+    utc_dt = ensure_utc(dt)
+    return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     """
     Ensure a datetime is timezone-aware (UTC).
@@ -59,4 +86,3 @@ def make_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
     
     # Convert to UTC and remove timezone info
     return dt.astimezone(timezone.utc).replace(tzinfo=None)
-

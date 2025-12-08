@@ -14,16 +14,7 @@ from app.schemas.schemas import BookingCreate, BookingUpdate
 from app.services.crud import service
 from app.core.redis_client import publish_event
 from app.services.crud.company import get_company_users
-
-
-def ensure_timezone_aware(dt: datetime) -> datetime:
-    """
-    Ensure a datetime is timezone-aware (UTC).
-    If it's naive, assume it's UTC and make it aware.
-    """
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
+from app.core.datetime_utils import utcnow, ensure_utc
 
 
 def get(db: Session, id: UUID4) -> Optional[Bookings]:
@@ -49,13 +40,17 @@ def get_all_bookings_in_range(db: Session, start_date: date, end_date: date):
 
 
 def get_all_bookings_in_range_by_company(db: Session, company_id: str, start_date: date, end_date: date):
-    return (db.query(Bookings).join(BookingServices, Bookings.id == BookingServices.booking_id)
-          .filter(
+    # Convert dates to UTC datetime if they aren't already
+    start_datetime = ensure_utc(datetime.combine(start_date, datetime.min.time()))
+    end_datetime = ensure_utc(datetime.combine(end_date, datetime.max.time()))
+
+    return db.query(Bookings).join(BookingServices, Bookings.id == BookingServices.booking_id).filter(
         Bookings.company_id == company_id,
-        Bookings.start_at >= start_date,
-        Bookings.end_at <= end_date,
+        Bookings.start_at >= start_datetime,
+        Bookings.end_at <= end_datetime,
         Bookings.status.in_(['scheduled', 'confirmed', 'completed'])
-    ).all())
+    ).all()
+
 
 def check_staff_availability(db: Session, user_id: UUID4, start_time: datetime, end_time: datetime, exclude_booking_id: Optional[UUID4] = None) -> tuple[bool, Optional[str]]:
     """
@@ -108,31 +103,38 @@ def calc_service_params(db, services: List[BookingServiceRequest], company_id: s
 
 def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
     total_duration, total_price = calc_service_params(db, obj_in.services, obj_in.company_id)
+
+    # Ensure start_time is in UTC
+    start_time_utc = ensure_utc(obj_in.start_time)
+    end_time_utc = start_time_utc + timedelta(minutes=total_duration)
+
     db_obj = Bookings(
         customer_id=customer_id,
         company_id=obj_in.company_id,
-        start_at=obj_in.start_time,
-        end_at= obj_in.start_time + timedelta(minutes=total_duration),
+        start_at=start_time_utc,
+        end_at=end_time_utc,
         total_price=total_price,
         notes=obj_in.notes
     )
     db.add(db_obj)
     db.commit()
 
-    start_time = obj_in.start_time
+    current_start_time = start_time_utc
     for srv in obj_in.services:
         if not srv.user_id:
             srv.user_id = get_company_users(db, str(obj_in.company_id))[0].user_id
         duration, _ = calc_service_params(db, [srv], obj_in.company_id)
+        service_end_time = current_start_time + timedelta(minutes=duration)
+
         db_service_obj = BookingServices(
             booking_id=db_obj.id,
             category_service_id=srv.category_service_id,
             user_id=srv.user_id,
             notes=srv.notes,
-            start_at=start_time,
-            end_at=start_time + timedelta(minutes=duration)
+            start_at=current_start_time,
+            end_at=service_end_time
         )
-        start_time = db_service_obj.end_at
+        current_start_time = service_end_time
         db.add(db_service_obj)
 
     db.commit()
@@ -156,7 +158,7 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
     if obj_in.services is not None:
         # Update start time if provided
         if obj_in.start_time is not None:
-            db_obj.start_at = obj_in.start_time
+            db_obj.start_at = ensure_utc(obj_in.start_time)
 
         # Remove existing booking services
         db.query(BookingServices).filter(BookingServices.booking_id == db_obj.id).delete()
@@ -181,7 +183,7 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
                 start_at=current_start_time,
                 end_at=current_start_time + timedelta(minutes=duration)
             )
-            current_start_time = db_service_obj.end_at
+            current_start_time = ensure_utc(db_service_obj.end_at)
             db.add(db_service_obj)
 
     # If only start_time is being updated (without services)
@@ -192,22 +194,22 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
         ).order_by(BookingServices.start_at).all()
 
         # Ensure timezone awareness before calculating time difference
-        new_start_time = ensure_timezone_aware(obj_in.start_time)
-        old_start_time = ensure_timezone_aware(db_obj.start_at)
+        new_start_time = ensure_utc(obj_in.start_time)
+        old_start_time = ensure_utc(db_obj.start_at)
 
         # Calculate the time difference
         time_diff = new_start_time - old_start_time
 
         # Update booking start and end times
         db_obj.start_at = new_start_time
-        db_obj.end_at = ensure_timezone_aware(db_obj.end_at) + time_diff
+        db_obj.end_at = ensure_utc(db_obj.end_at) + time_diff
 
         # Update all existing booking services with the new times
         current_start_time = new_start_time
         for booking_service in existing_services:
             # Ensure timezone awareness for service times
-            service_start = ensure_timezone_aware(booking_service.start_at)
-            service_end = ensure_timezone_aware(booking_service.end_at)
+            service_start = ensure_utc(booking_service.start_at)
+            service_end = ensure_utc(booking_service.end_at)
 
             # Calculate the duration of this service
             service_duration = service_end - service_start

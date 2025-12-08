@@ -9,6 +9,7 @@ from app.schemas.membership import (
     MembershipPlanCreate, MembershipPlanUpdate,
     CompanyMembershipCreate, CompanyMembershipUpdate
 )
+from app.core.datetime_utils import utcnow, ensure_utc
 
 
 class MembershipPlanCRUD:
@@ -45,20 +46,25 @@ class MembershipPlanCRUD:
         update_data = obj_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_obj, field, value)
+
+        # Ensure updated_at is set to current UTC time
+        db_obj.updated_at = utcnow()
+
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
         return db_obj
 
     def delete(self, db: Session, *, id: str) -> Optional[MembershipPlans]:
-        """Soft delete a membership plan by setting status to inactive"""
-        obj = db.query(MembershipPlans).filter(MembershipPlans.id == id).first()
-        if obj:
-            obj.status = StatusType.inactive
-            db.add(obj)
+        """Soft delete membership plan"""
+        db_obj = db.query(MembershipPlans).filter(MembershipPlans.id == id).first()
+        if db_obj:
+            db_obj.status = StatusType.inactive
+            db_obj.updated_at = utcnow()
+            db.add(db_obj)
             db.commit()
-            db.refresh(obj)
-        return obj
+            db.refresh(db_obj)
+        return db_obj
 
 
 class CompanyMembershipCRUD:
@@ -81,7 +87,7 @@ class CompanyMembershipCRUD:
             db.add(membership)
 
         # Calculate end date
-        start_date = datetime.now(timezone.utc)
+        start_date = utcnow()
         end_date = start_date + timedelta(days=int(str(plan.duration_days)))
 
         db_obj = CompanyMemberships(
@@ -118,8 +124,19 @@ class CompanyMembershipCRUD:
     def update(self, db: Session, *, db_obj: CompanyMemberships, obj_in: CompanyMembershipUpdate) -> CompanyMemberships:
         """Update company membership"""
         update_data = obj_in.model_dump(exclude_unset=True)
+
+        # Ensure datetime fields are in UTC
+        if 'start_date' in update_data:
+            update_data['start_date'] = ensure_utc(update_data['start_date'])
+        if 'end_date' in update_data:
+            update_data['end_date'] = ensure_utc(update_data['end_date'])
+
         for field, value in update_data.items():
             setattr(db_obj, field, value)
+
+        # Ensure updated_at is set to current UTC time
+        db_obj.updated_at = utcnow()
+
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)

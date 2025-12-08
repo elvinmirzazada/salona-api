@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models.models import Invitations, CompanyUsers
 from app.schemas.schemas import Invitation
 from app.models.enums import InvitationStatus, StatusType, CompanyRoleType
+from app.core.datetime_utils import utcnow
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ def create_invitation(
             # Update the existing invitation
             existing.token = token
             existing.role = role
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = utcnow()
             db.add(existing)
             db.commit()
             db.refresh(existing)
@@ -57,12 +58,12 @@ def create_invitation(
 
         # Create new invitation
         invitation = Invitations(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             email=email,
             token=token,
             role=role,
-            status=InvitationStatus.PENDING,
-            company_id=company_id
+            company_id=company_id,
+            status=InvitationStatus.PENDING
         )
 
         db.add(invitation)
@@ -71,12 +72,12 @@ def create_invitation(
         return Invitation.model_validate(invitation)
 
     except SQLAlchemyError as e:
+        logger.error(f"Database error creating invitation: {e}")
         db.rollback()
-        logger.error(f"Database error while creating invitation: {str(e)}")
         raise
     except Exception as e:
+        logger.error(f"Unexpected error creating invitation: {e}")
         db.rollback()
-        logger.error(f"Unexpected error while creating invitation: {str(e)}")
         raise
 
 
@@ -191,7 +192,7 @@ def accept_invitation(
     try:
         # Update invitation status
         invitation.status = InvitationStatus.USED
-        invitation.updated_at = datetime.now(timezone.utc)
+        invitation.updated_at = utcnow()
         db.add(invitation)
 
         # Check if user is already a company member
@@ -248,7 +249,7 @@ def decline_invitation(db: Session, token: str) -> bool:
             return False
 
         invitation.status = InvitationStatus.DECLINED
-        invitation.updated_at = datetime.now(timezone.utc)
+        invitation.updated_at = utcnow()
         db.add(invitation)
         db.commit()
         return True
@@ -287,8 +288,8 @@ def resend_invitation(
         # Generate new token and reset to pending
         invitation.token = str(uuid.uuid4())
         invitation.status = InvitationStatus.PENDING
-        invitation.created_at = datetime.now(timezone.utc)
-        invitation.updated_at = datetime.now(timezone.utc)
+        invitation.created_at = utcnow()
+        invitation.updated_at = utcnow()
 
         db.add(invitation)
         db.commit()

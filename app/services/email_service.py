@@ -538,7 +538,7 @@ def create_verification_token(
     """
     token = str(uuid.uuid4())
     expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
-
+    
     if entity_type == "user":
         db_obj = UserVerifications(
             id=uuid.uuid4(),

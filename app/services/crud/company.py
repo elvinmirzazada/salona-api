@@ -13,6 +13,7 @@ from app.schemas.schemas import (
     User
 )
 from app.services.auth import hash_password
+from app.core.datetime_utils import utcnow
 
 
 def get(db: Session, id: str) -> Optional[Companies]:
@@ -116,8 +117,10 @@ def update(db: Session, *, db_obj: Companies, obj_in: dict) -> Companies:
         Updated company object
     """
     for field, value in obj_in.items():
-        if value is not None:
-            setattr(db_obj, field, value)
+        setattr(db_obj, field, value)
+
+    # Ensure updated_at is set to current UTC time
+    db_obj.updated_at = utcnow()
 
     db.add(db_obj)
     db.commit()
@@ -231,10 +234,10 @@ def create_company_phone(db: Session, *, obj_in: CompanyPhoneCreate) -> List[Com
             status=phone_data.status
         )
         # db_obj.id = str(uuid.uuid4())
-        
+
         db.add(db_obj)
         created_phones.append(db_obj)
-        
+
     # Commit all new phone numbers at once
     db.commit()
 
@@ -338,3 +341,4 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
     db.refresh(company_user)
 
     return company_user
+

@@ -12,6 +12,7 @@ from app.schemas import CompanyUser, User
 from app.schemas.schemas import (
     UserCreate, UserUpdate
 )
+from app.core.datetime_utils import utcnow
 
 
 def get(db: Session, id: UUID4) -> Optional[Users]:
@@ -48,6 +49,9 @@ def update(db: Session, *, db_obj: Users, obj_in: UserUpdate) -> Users:
     for field, value in update_data.items():
         setattr(db_obj, field, value)
     
+    # Ensure updated_at is set to current UTC time
+    db_obj.updated_at = utcnow()
+
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
@@ -66,22 +70,22 @@ def verify_token(db: Session, db_obj: UserVerifications) -> bool:
     """Mark verification token as verified and update user email_verified status"""
     try:
         db_obj.status = VerificationStatus.VERIFIED
-        db_obj.used_at = datetime.now(timezone.utc)
+        db_obj.used_at = utcnow()
 
         # Update user's email_verified status
         user = db.query(Users).filter(Users.id == db_obj.user_id).first()
         if user:
             user.email_verified = True
             user.status = CustomerStatusType.active
+            user.updated_at = utcnow()
             db.add(user)
 
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
         return True
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"Error verifying token: {str(e)}")
         return False
 
 
