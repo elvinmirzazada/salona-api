@@ -51,7 +51,7 @@ def update(db: Session, *, db_obj: Users, obj_in: UserUpdate) -> Users:
     
     # Ensure updated_at is set to current UTC time
     db_obj.updated_at = utcnow()
-
+    
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)

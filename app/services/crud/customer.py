@@ -40,10 +40,10 @@ def update(db: Session, *, db_obj: Customers, obj_in: CustomerUpdate) -> Custome
     update_data = obj_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_obj, field, value)
-
+    
     # Ensure updated_at is set to current UTC time
     db_obj.updated_at = utcnow()
-
+    
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
@@ -57,14 +57,14 @@ def verify_token(db: Session, db_obj: CustomerVerifications) -> bool:
     try:
         db_obj.status = VerificationStatus.VERIFIED
         db_obj.used_at = utcnow()
-
+        
         # Update customer's email verification status
         customer = db.query(Customers).filter(Customers.id == db_obj.customer_id).first()
         if customer:
             customer.email_verified = True
             customer.updated_at = utcnow()
             db.add(customer)
-
+        
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
@@ -80,7 +80,7 @@ def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomers
         .filter(Bookings.company_id == company_id)
         .all()
     )
-
+    
     return [
         CompanyCustomers(
             id=customer.id,

@@ -118,10 +118,10 @@ def update(db: Session, *, db_obj: Companies, obj_in: dict) -> Companies:
     """
     for field, value in obj_in.items():
         setattr(db_obj, field, value)
-
+    
     # Ensure updated_at is set to current UTC time
     db_obj.updated_at = utcnow()
-
+    
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
@@ -341,4 +341,70 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
     db.refresh(company_user)
 
     return company_user
+
+
+def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: dict) -> Optional[CompanyUsers]:
+    """
+    Update a company user's role or status.
+
+    Args:
+        db: Database session
+        company_id: Company ID
+        user_id: User ID to update
+        obj_in: Data to update (role, status)
+
+    Returns:
+        Updated CompanyUsers object or None if not found
+    """
+    company_user = db.query(CompanyUsers).filter(
+        CompanyUsers.company_id == company_id,
+        CompanyUsers.user_id == user_id
+    ).first()
+
+    if not company_user:
+        return None
+
+    # Update fields
+    for field, value in obj_in.items():
+        if hasattr(company_user, field):
+            setattr(company_user, field, value)
+
+    # Update timestamp
+    company_user.updated_at = utcnow()
+
+    db.add(company_user)
+    db.commit()
+    db.refresh(company_user)
+
+    return company_user
+
+
+def delete_company_user(db: Session, *, company_id: str, user_id: str) -> bool:
+    """
+    Remove a user from a company (soft delete by setting status to inactive).
+
+    Args:
+        db: Database session
+        company_id: Company ID
+        user_id: User ID to remove
+
+    Returns:
+        True if user was removed, False if not found
+    """
+    company_user = db.query(CompanyUsers).filter(
+        CompanyUsers.company_id == company_id,
+        CompanyUsers.user_id == user_id
+    ).first()
+
+    if not company_user:
+        return False
+
+    # Soft delete by setting status to inactive
+    company_user.status = StatusType.inactive
+    company_user.updated_at = utcnow()
+
+    db.add(company_user)
+    db.commit()
+
+    return True
 

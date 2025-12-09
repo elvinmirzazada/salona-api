@@ -65,7 +65,7 @@ def create_invitation(
             company_id=company_id,
             status=InvitationStatus.PENDING
         )
-
+        
         db.add(invitation)
         db.commit()
         db.refresh(invitation)

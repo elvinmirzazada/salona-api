@@ -53,6 +53,11 @@ class CompanyUser(TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CompanyUserUpdate(BaseModel):
+    role: Optional[str] = None
+    status: Optional[StatusType] = None
+
+
 # Company schemas
 class CompanyBase(BaseModel):
     name: str

@@ -17,7 +17,7 @@ from app.models import CompanyAddresses
 from app.models.models import Users, CompanyUsers
 from app.models.enums import CompanyRoleType, StatusType, InvitationStatus
 from app.schemas import (
-    CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser,
+    CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, CompanyUserUpdate,
     CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate,
     CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate,
     Invitation, InvitationCreate, InvitationAccept, CompanyAddressResponse
@@ -604,6 +604,106 @@ async def add_company_member(
         db.rollback()
         return DataResponse.error_response(
             message=f"Failed to add member to company: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.put("/members/{user_id}", response_model=DataResponse[CompanyUser])
+async def update_company_member(
+    *,
+    db: Session = Depends(get_db),
+    user_id: str,
+    company_id: str = Depends(get_current_company_id),
+    user_update: CompanyUserUpdate,
+    _: None = Depends(require_admin_or_owner)  # Only admin or owner can update members
+) -> DataResponse:
+    """
+    Update a company member's role or status.
+    Requires admin or owner role.
+    """
+    try:
+        # Validate that the update data is not empty
+        update_data = user_update.model_dump(exclude_unset=True)
+        if not update_data:
+            return DataResponse.error_response(
+                message="No fields to update",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update the company user
+        updated_company_user = crud_company.update_company_user(
+            db=db,
+            company_id=company_id,
+            user_id=user_id,
+            obj_in=update_data
+        )
+
+        if not updated_company_user:
+            return DataResponse.error_response(
+                message="Company user not found",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get the updated company user with user details
+        company_user = crud_company.get_company_user(db=db, company_id=company_id, user_id=user_id)
+
+        return DataResponse.success_response(
+            data=company_user,
+            message="Company member updated successfully",
+            status_code=status.HTTP_200_OK
+        )
+
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to update company member: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.delete("/members/{user_id}", response_model=DataResponse)
+async def remove_company_member(
+    *,
+    db: Session = Depends(get_db),
+    user_id: str,
+    company_id: str = Depends(get_current_company_id),
+    _: None = Depends(require_admin_or_owner)  # Only admin or owner can remove members
+) -> DataResponse:
+    """
+    Remove a member from the company (soft delete by setting status to inactive).
+    Requires admin or owner role.
+    """
+    try:
+        # Check if the user exists in the company first
+        existing_user = crud_company.get_company_user(db=db, company_id=company_id, user_id=user_id)
+        if not existing_user:
+            return DataResponse.error_response(
+                message="Company user not found",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+        # Remove the user from the company
+        success = crud_company.delete_company_user(
+            db=db,
+            company_id=company_id,
+            user_id=user_id
+        )
+
+        if not success:
+            return DataResponse.error_response(
+                message="Failed to remove user from company",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        return DataResponse.success_response(
+            message="Company member removed successfully",
+            status_code=status.HTTP_200_OK
+        )
+
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to remove company member: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
