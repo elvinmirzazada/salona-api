@@ -1,16 +1,15 @@
 import uuid
 from typing import Optional, List
-from datetime import datetime, timezone
 
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
-from app.models import Companies, Bookings
+from app.models import Bookings
 from app.models.models import (Customers, CustomerVerifications, CustomerEmails)
-from app.models.enums import VerificationStatus
-from app.schemas import CompanyCustomers
+from app.models.enums import VerificationStatus, BookingStatus
 from app.schemas.schemas import (
-    CustomerCreate, CustomerUpdate
+    CustomerCreate, CustomerUpdate, CompanyCustomer
 )
 from app.core.datetime_utils import utcnow
 
@@ -73,16 +72,53 @@ def verify_token(db: Session, db_obj: CustomerVerifications) -> bool:
         db.rollback()
         return False
 
-def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomers]:
+def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomer]:
+    # Get all unique customers who have bookings with this company
     customers = (
         db.query(Customers)
         .join(Bookings, Customers.id == Bookings.customer_id)
         .filter(Bookings.company_id == company_id)
+        .distinct()
         .all()
     )
-    
-    return [
-        CompanyCustomers(
+
+    # Build the response with calculated fields
+    result = []
+    for customer in customers:
+        # Count total bookings for this customer with this company
+        total_bookings = (
+            db.query(func.count(Bookings.id))
+            .filter(
+                Bookings.customer_id == customer.id,
+                Bookings.company_id == company_id
+            )
+            .scalar()
+        ) or 0
+
+        # Calculate total spent from completed bookings only
+        total_spent = (
+            db.query(func.sum(Bookings.total_price))
+            .filter(
+                Bookings.customer_id == customer.id,
+                Bookings.company_id == company_id,
+                Bookings.status == BookingStatus.COMPLETED
+            )
+            .scalar()
+        ) or 0
+
+        # Get the last visit date (most recent completed booking)
+        last_visit = (
+            db.query(func.max(Bookings.end_at))
+            .filter(
+                Bookings.customer_id == customer.id,
+                Bookings.company_id == company_id,
+                Bookings.status == BookingStatus.COMPLETED
+            )
+            .scalar()
+        )
+
+        # Create CompanyCustomer schema with calculated fields
+        company_customer = CompanyCustomer(
             id=customer.id,
             first_name=customer.first_name,
             last_name=customer.last_name,
@@ -91,7 +127,11 @@ def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomers
             status=customer.status,
             email_verified=customer.email_verified,
             created_at=customer.created_at,
-            updated_at=customer.updated_at
+            updated_at=customer.updated_at,
+            total_bookings=total_bookings,
+            total_spent=total_spent,
+            last_visit=last_visit
         )
-        for customer in customers
-    ]
+        result.append(company_customer)
+
+    return result

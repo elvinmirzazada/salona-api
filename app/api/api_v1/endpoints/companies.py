@@ -20,7 +20,7 @@ from app.schemas import (
     CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, CompanyUserUpdate,
     CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate,
     CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate,
-    Invitation, InvitationCreate, InvitationAccept, CompanyAddressResponse
+    Invitation, InvitationCreate, InvitationAccept, CompanyAddressResponse, CompanyCustomer
 )
 from app.schemas.responses import DataResponse
 from app.services.crud import company as crud_company
@@ -262,7 +262,7 @@ async def get_company_services(
     )
 
 
-@router.get('/customers', response_model=DataResponse[List[Customer]])
+@router.get('/customers', response_model=DataResponse[List[CompanyCustomer]])
 async def get_company_customers(
         db: Session = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
@@ -275,7 +275,7 @@ async def get_company_customers(
     customers = crud_customer.get_company_customers(
         db=db, company_id=company_id
     )
-
+    customers = [Customer.model_validate(customer) for customer in customers]
     return DataResponse.success_response(
         data=customers,
         message="Company customers retrieved successfully",

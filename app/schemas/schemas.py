@@ -240,10 +240,13 @@ class Booking(BookingBase, TimestampedModel):
 
 
 #
-class CompanyCustomers(Company):
+class CompanyCustomer(Customer):
+    email_verified: bool = False
+    total_bookings: int = 0
+    total_spent: int = 0
+    last_visit: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
-    customers: List[Customer] = []
 
 # # Enhanced schemas with relationships
 # class BusinessWithDetails(Business):
