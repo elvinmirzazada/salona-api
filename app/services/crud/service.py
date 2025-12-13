@@ -252,3 +252,34 @@ def remove_staff_from_service(db: Session, service_id: UUID4, staff_id: UUID4) -
         db.commit()
         return True
     return False
+
+
+def delete_service(db: Session, service_id: UUID4, company_id: Optional[UUID4] = None) -> bool:
+    """
+    Delete a service and any staff assignments tied to it.
+
+    If company_id is provided, ensure the service belongs to a category for that company
+    before deleting (extra safety).
+
+    Returns True when deletion happened, False when the service was not found or the
+    company check failed.
+    """
+    # If company_id is provided, ensure the service belongs to that company
+    if company_id:
+        service = (db.query(CategoryServices)
+                   .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
+                   .filter(CategoryServices.id == service_id, CompanyCategories.company_id == company_id)
+                   .one_or_none())
+    else:
+        service = db.query(CategoryServices).filter(CategoryServices.id == service_id).one_or_none()
+
+    if not service:
+        return False
+
+    # Remove any ServiceStaff assignments for this service
+    db.query(ServiceStaff).filter(ServiceStaff.service_id == service_id).delete(synchronize_session=False)
+
+    # Delete the service itself
+    db.delete(service)
+    db.commit()
+    return True

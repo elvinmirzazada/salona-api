@@ -81,7 +81,7 @@ def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomer]
         .distinct()
         .all()
     )
-
+    
     # Build the response with calculated fields
     result = []
     for customer in customers:
@@ -94,7 +94,7 @@ def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomer]
             )
             .scalar()
         ) or 0
-
+        
         # Calculate total spent from completed bookings only
         total_spent = (
             db.query(func.sum(Bookings.total_price))
@@ -105,7 +105,7 @@ def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomer]
             )
             .scalar()
         ) or 0
-
+        
         # Get the last visit date (most recent completed booking)
         last_visit = (
             db.query(func.max(Bookings.end_at))
@@ -116,7 +116,7 @@ def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomer]
             )
             .scalar()
         )
-
+        
         # Create CompanyCustomer schema with calculated fields
         company_customer = CompanyCustomer(
             id=customer.id,
@@ -133,5 +133,5 @@ def get_company_customers(db: Session, company_id: str) -> List[CompanyCustomer]
             last_visit=last_visit
         )
         result.append(company_customer)
-
+    
     return result
