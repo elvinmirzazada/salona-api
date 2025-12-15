@@ -96,7 +96,7 @@ def calc_service_params(db, services: List[BookingServiceRequest], company_id: s
     for srv in services:
         selected_srv = service.get_service(db, srv.category_service_id, company_id)
         total_duration += selected_srv.duration
-        total_price += int(selected_srv.price)
+        total_price += int(selected_srv.discount_price or selected_srv.price)
 
     return total_duration, total_price
 

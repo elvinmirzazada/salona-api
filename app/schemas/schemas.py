@@ -420,7 +420,7 @@ class CompanyAddressResponse(CompanyAddressBase, TimestampedModel):
 class NotificationBase(BaseModel):
     type: NotificationType
     message: str
-    data: Optional[str] = None
+    data: Optional[bytes] = None
     status: NotificationStatus = NotificationStatus.UNREAD
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

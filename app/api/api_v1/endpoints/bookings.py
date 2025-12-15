@@ -24,6 +24,7 @@ from app.models import BookingServices, BookingStatus, NotificationType
 
 from app.services.auth import verify_token
 import uuid
+import json
 
 
 router = APIRouter()
@@ -136,12 +137,18 @@ async def create_booking(
         # publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
 
         # Create confirmation notification for the assigned staff member
+        booking_data = json.dumps({
+            'booking_id': str(booking.id),
+            'company_id': str(booking.company_id)
+        }).encode('utf-8')
+
         _ = notification_service.create_notification(
             db=db,
             notification_request=CompanyNotificationCreate(
                 company_id=booking_in.company_id,
                 type=NotificationType.BOOKING_CREATED,
-                message=f"A new booking has been created by {customer.first_name} {customer.last_name}"
+                message=f"A new booking has been created by {customer.first_name} {customer.last_name}",
+                data=booking_data
             )
         )
 
@@ -370,12 +377,18 @@ async def create_booking_by_user(
         # await publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
 
         # Create confirmation notification for the assigned staff member
+        booking_data = json.dumps({
+            'booking_id': str(booking.id),
+            'company_id': str(booking.company_id)
+        }).encode('utf-8')
+
         res = notification_service.create_notification(
             db=db,
             notification_request=CompanyNotificationCreate(
                 company_id=booking_in.company_id,
                 type=NotificationType.BOOKING_CREATED,
-                message=f"A new booking has been created by {customer.first_name} {customer.last_name}"
+                message=f"A new booking has been created by {customer.first_name} {customer.last_name}",
+                data=booking_data
             )
         )
         booking = Booking.model_validate(booking)

@@ -33,7 +33,6 @@ async def get_company_notifications(
         per_page=per_page,
         status_filter=status_filter.value if status_filter else None
     )
-    print(notifications)
     return PaginatedResponse.success_response(
         data=notifications,
         pagination=pagination_info,
