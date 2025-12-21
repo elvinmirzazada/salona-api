@@ -381,7 +381,7 @@ async def create_booking_by_user(
             'booking_id': str(booking.id),
             'company_id': str(booking.company_id)
         }).encode('utf-8')
-
+        
         res = notification_service.create_notification(
             db=db,
             notification_request=CompanyNotificationCreate(
