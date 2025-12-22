@@ -20,7 +20,7 @@ from app.services.crud import customer as crud_customer
 from app.api.dependencies import get_current_company_id, get_token_payload
 from app.schemas.responses import DataResponse
 from app.api.dependencies import get_current_customer
-from app.models import BookingServices, BookingStatus, NotificationType
+from app.models import BookingServices, BookingStatus, NotificationType, CompanyUsers, CompanyRoleType, Users
 
 from app.services.auth import verify_token
 import uuid
@@ -158,16 +158,16 @@ async def create_booking(
             for user, company_service in item:
                 selected_service_names.append(company_service.name)
             # Send email notification to assigned staff member
-            _ = email_service.send_booking_notification_email(
+            _ = email_service.send_booking_request_to_staff_email(
                 to_email=company_user.email,
                 staff_name=company_user.first_name,
                 customer_name=booking_in.customer_info.first_name + ' ' + booking_in.customer_info.last_name,
                 company_name=selected_company.name,
                 booking_date=booking.start_at.isoformat(),
                 services=selected_service_names,
-                booking_notes=booking_in.notes
+                booking_notes=booking_in.notes,
+                booking_id=booking.id
             )
-
 
         db.commit()
         return DataResponse.success_response(
@@ -604,6 +604,17 @@ async def delete_booking(
 
         db.commit()
 
+        company = crud_company.get(db, id=cancelled_booking.company_id)
+
+        email_service.send_booking_cancellation_to_customer_email(
+            to_email=cancelled_booking.customer.email,
+            customer_name=cancelled_booking.customer.first_name,
+            company_name=company.name,
+            booking_date=cancelled_booking.start_at.isoformat(),
+            services=[service.category_service.name for service in cancelled_booking.booking_services],
+            company_id=company.id
+        )
+
         response.status_code = status.HTTP_200_OK
         return DataResponse.success_response(
             message="Booking cancelled successfully",
@@ -684,7 +695,15 @@ async def confirm_booking(
             )
 
         db.commit()
+        company = crud_company.get(db, id=confirmed_booking.company_id)
 
+        email_service.send_booking_confirmation_to_customer_email(
+            to_email=confirmed_booking.customer.email,
+            customer_name=confirmed_booking.customer.first_name,
+            company_name=company.name,
+            booking_date=confirmed_booking.start_at.isoformat(),
+            services=[service.category_service.name for service in confirmed_booking.booking_services]
+        )
         response.status_code = status.HTTP_200_OK
         return DataResponse.success_response(
             message="Booking confirmed successfully",
@@ -765,7 +784,15 @@ async def complete_booking(
             )
 
         db.commit()
-
+        company = crud_company.get(db, id=completed_booking.company_id)
+        email_service.send_booking_completed_to_customer_email(
+            to_email=completed_booking.customer.email,
+            customer_name=completed_booking.customer.first_name,
+            company_name=company.name,
+            booking_date=completed_booking.start_at.isoformat(),
+            services=[service.category_service.name for service in completed_booking.booking_services],
+            total_price=completed_booking.total_price / 100.0
+        )
         response.status_code = status.HTTP_200_OK
         return DataResponse.success_response(
             message="Booking completed successfully",
