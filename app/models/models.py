@@ -2,7 +2,7 @@ import uuid
 
 from pydantic.v1 import create_model_from_typeddict
 from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID,
-                        Time,
+                        Time, Computed,
                         CheckConstraint, false, BLOB, LargeBinary, Index)
 from sqlalchemy.dialects.postgresql import ENUM as SQLAlchemyEnum
 from sqlalchemy.orm import relationship
@@ -96,6 +96,10 @@ class Companies(BaseModel):
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    slug = Column(
+        String,
+        Computed("REPLACE(LOWER(name), ' ', '-')", persisted=True)
+    )
 
     invitations = relationship("Invitations", back_populates="company")
 

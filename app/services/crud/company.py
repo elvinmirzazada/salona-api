@@ -20,6 +20,10 @@ def get(db: Session, id: str) -> Optional[Companies]:
     return db.query(Companies).filter(Companies.id == id).first()
 
 
+def get_by_slug(db: Session, slug: str) -> Optional[Companies]:
+    return db.query(Companies).filter(Companies.slug == slug).first()
+
+
 def get_company_users(db: Session, company_id: str) -> List[CompanyUsers]:
     """Get all users belonging to the given company."""
     return list(db.query(CompanyUsers).filter(CompanyUsers.company_id == company_id).all())

@@ -67,6 +67,7 @@ class CompanyBase(BaseModel):
     description: Optional[str] = None
     team_size: Optional[int] = 0
     status: StatusType = StatusType.active
+    slug: Optional[str] = None
 
 
 class CompanyCreate(CompanyBase):

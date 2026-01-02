@@ -352,6 +352,27 @@ async def get_company_by_id(
         data=company
     )
 
+
+@router.get("/slug/{slug}", response_model=DataResponse[Company])
+async def get_company_by_slug(
+    *,
+    db: Session = Depends(get_db),
+    slug: str
+) -> DataResponse:
+    """
+    Get a specific business by ID.
+    Only the owner can access their business details.
+    """
+    company = crud_company.get_by_slug(db=db, slug=slug)
+    if not company:
+        return DataResponse.error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            message="Company not found"
+        )
+    return DataResponse.success_response(
+        data=company
+    )
+
 @router.get("/{company_id}/address", response_model=DataResponse[CompanyAddressResponse])
 async def get_company_address(
     *,
