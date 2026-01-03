@@ -23,6 +23,7 @@ class UserBase(BaseModel):
     phone: str
     languages: Optional[str] = "English"
     position: Optional[str] = 'Professional'
+    profile_photo_url: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -36,6 +37,7 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = None
     languages: Optional[str] = None
     position: Optional[str] = None
+    profile_photo_url: Optional[str] = None
 
 
 class User(UserBase, TimestampedModel):

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, Request, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timedelta
@@ -812,3 +812,54 @@ async def google_callback(
 
     except Exception as e:
         return DataResponse.error_response(message=f"Google OAuth process failed: {str(e)}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@router.post("/me/profile-photo", response_model=DataResponse[dict])
+async def upload_profile_photo(
+        *,
+        db: Session = Depends(get_db),
+        file: UploadFile = File(...),
+        current_user: Users = Depends(get_current_active_user)
+) -> DataResponse:
+    """Upload profile photo to S3 and update user record."""
+    try:
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
+        if file.content_type not in allowed_types:
+            return DataResponse.error_response(
+                message="Invalid file type. Only JPEG, PNG, and WebP are allowed",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate file size (e.g., max 5MB)
+        file_content = await file.read()
+        if len(file_content) > 5 * 1024 * 1024:
+            return DataResponse.error_response(
+                message="File size exceeds 5MB limit",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Upload to S3 (implement this service)
+        from app.services.file_storage import file_storage_service
+        photo_url = await file_storage_service.upload_file(
+            file_content=file_content,
+            file_name=f"users/{current_user.id}/profile.{file.filename.split('.')[-1]}",
+            content_type=file.content_type
+        )
+
+        # Update user record
+        _ = crud_user.update(
+            db=db,
+            db_obj=current_user,
+            obj_in=UserUpdate(profile_photo_url=photo_url)
+        )
+
+        return DataResponse.success_response(
+            message="Profile photo uploaded successfully",
+            data={"profile_photo_url": photo_url}
+        )
+    except Exception as e:
+        return DataResponse.error_response(
+            message=f"Failed to upload profile photo: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

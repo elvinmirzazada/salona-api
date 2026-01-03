@@ -32,6 +32,7 @@ class Users(BaseModel):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
     languages = Column(String(255), nullable=True)
     position = Column(String(255), nullable=True)
+    profile_photo_url = Column(String(510), nullable=True)
 
     company_user = relationship("CompanyUsers", back_populates="user")
     user_time_offs = relationship("UserTimeOffs", back_populates="user")
