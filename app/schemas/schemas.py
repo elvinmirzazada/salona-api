@@ -21,6 +21,8 @@ class UserBase(BaseModel):
     last_name: str
     email: str
     phone: str
+    languages: Optional[str] = "English"
+    position: Optional[str] = 'Professional'
 
 
 class UserCreate(UserBase):
@@ -32,6 +34,8 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
+    languages: Optional[str] = None
+    position: Optional[str] = None
 
 
 class User(UserBase, TimestampedModel):

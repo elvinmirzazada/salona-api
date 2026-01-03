@@ -30,6 +30,8 @@ class Users(BaseModel):
     email_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    languages = Column(String(255), nullable=True)
+    position = Column(String(255), nullable=True)
 
     company_user = relationship("CompanyUsers", back_populates="user")
     user_time_offs = relationship("UserTimeOffs", back_populates="user")
