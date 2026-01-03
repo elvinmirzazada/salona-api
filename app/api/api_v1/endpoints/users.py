@@ -863,3 +863,28 @@ async def upload_profile_photo(
             message=f"Failed to upload profile photo: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@router.delete("/me/profile-photo", response_model=DataResponse)
+async def delete_profile_photo(
+        *,
+        db: Session = Depends(get_db),
+        current_user: Users = Depends(get_current_active_user)
+) -> DataResponse:
+    """Upload profile photo to S3 and update user record."""
+    try:
+        # Update user record
+        _ = crud_user.update(
+            db=db,
+            db_obj=current_user,
+            obj_in=UserUpdate(profile_photo_url=None)
+        )
+
+        return DataResponse.success_response(
+            message="Profile photo deleted successfully",
+        )
+    except Exception as e:
+        return DataResponse.error_response(
+            message=f"Failed to delete profile photo: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
