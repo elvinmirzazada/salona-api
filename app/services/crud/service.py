@@ -67,7 +67,8 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
             status=service[2].status,
             buffer_before=service[2].buffer_before,
             buffer_after=service[2].buffer_after,
-            service_staff=staff_members
+            service_staff=staff_members,
+            image_url=service[2].image_url
         ))
 
     result = []
@@ -152,7 +153,8 @@ def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServic
         additional_info=obj_in.additional_info,
         status=obj_in.status,
         buffer_before=obj_in.buffer_before,
-        buffer_after=obj_in.buffer_after
+        buffer_after=obj_in.buffer_after,
+        image_url=obj_in.image_url
     )
 
     db.add(db_obj)

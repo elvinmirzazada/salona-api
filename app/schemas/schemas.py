@@ -207,6 +207,7 @@ class CategoryServiceResponse(BaseModel):
     additional_info: Optional[str] = None
     buffer_before: Optional[int] = 0
     buffer_after: Optional[int] = 0
+    image_url: Optional[str] = None
     service_staff: Optional[List['ServiceStaff']] = []  # List of staff assigned to this service
 
 
@@ -312,6 +313,7 @@ class CategoryServiceBase(BaseModel):
     status: StatusType = StatusType.active
     buffer_before: Optional[int] = 0
     buffer_after: Optional[int] = 0
+    image_url: Optional[str] = None
 
 class CategoryServiceCreate(CategoryServiceBase):
     category_id: str
@@ -327,6 +329,7 @@ class CategoryServiceUpdate(BaseModel):
     buffer_before: Optional[int] = None
     buffer_after: Optional[int] = None
     staff_ids: Optional[List[UUID4]] = None  # List of staff member IDs to assign to this service
+    image_url: Optional[str] = None
 
 
 class CompanyCategoryBase(BaseModel):

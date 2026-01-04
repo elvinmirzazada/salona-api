@@ -1,13 +1,15 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Annotated
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.schemas import (CompanyCategoryWithServicesResponse, CompanyUser,
                                CompanyCategoryCreate, CompanyCategoryUpdate, CompanyCategory,
                                CategoryServiceCreate, CategoryServiceUpdate, CategoryServiceResponse)
 from app.schemas.responses import DataResponse
-
+import uuid
+import json
 from app.services.crud import service as crud_service, user as crud_user
+from app.services.file_storage import file_storage_service
 from app.api.dependencies import get_current_company_id
 
 router = APIRouter()
@@ -170,16 +172,19 @@ def delete_category(
 
 
 @router.post("", response_model=DataResponse[CategoryServiceResponse], status_code=status.HTTP_201_CREATED)
-def create_service(
+async def create_service(
         *,
         db: Session = Depends(get_db),
-        service_in: CategoryServiceCreate,
+        service_in: Annotated[str, Form(...)],
+        image: Annotated[UploadFile, File()] = None,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Create a new service.
     """
     try:
+
+        service_in = CategoryServiceCreate(**json.loads(service_in))
         # Verify that the category belongs to the company
         category = crud_service.get_category(db=db, category_id=service_in.category_id)
         if not category:
@@ -193,6 +198,17 @@ def create_service(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Category does not belong to this company"
             )
+
+        # Upload image if provided
+        if image:
+            file_content = await image.read()
+            filename = f"services/{uuid.uuid4()}/service.{image.filename.split('.')[-1]}"
+            image_url = await file_storage_service.upload_file(
+                file_content=file_content,
+                file_name=filename,
+                content_type=image.content_type
+            )
+            service_in.image_url = image_url
 
         # Create the service
         service = crud_service.create_service(db=db, obj_in=service_in)
@@ -232,16 +248,20 @@ def get_service(
 
 
 @router.put("/service/{service_id}", response_model=DataResponse[CategoryServiceResponse])
-def update_service(
+async def update_service(
         *,
         db: Session = Depends(get_db),
         service_id: str,
-        service_in: CategoryServiceUpdate,
+        service_in: Annotated[str, Form(...)],
+        image: Annotated[UploadFile, File()] = None,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Update a service.
     """
+
+    service_in = CategoryServiceUpdate(**json.loads(service_in))
+
     # Verify the service exists and belongs to the company
     service = crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
     if not service:
@@ -249,6 +269,22 @@ def update_service(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Service not found"
         )
+
+    # Upload image if provided
+    if image:
+        curren_image_url = service.image_url
+        filename_prefix = f"{uuid.uuid4()}"
+        if curren_image_url:
+            filename_prefix = curren_image_url.split('/')[-2]
+
+        file_content = await image.read()
+        filename = f"services/{filename_prefix}/service.{image.filename.split('.')[-1]}"
+        image_url = await file_storage_service.upload_file(
+            file_content=file_content,
+            file_name=filename,
+            content_type=image.content_type
+        )
+        service_in.image_url = image_url
 
     # Update the service
     updated_service = crud_service.update_service(

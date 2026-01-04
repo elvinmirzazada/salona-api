@@ -266,6 +266,7 @@ class CategoryServices(BaseModel):
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
     buffer_before = Column(Integer, default=0)  # in minutes
     buffer_after = Column(Integer, default=0)   # in minutes
+    image_url = Column(String(510), nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
