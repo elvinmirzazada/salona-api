@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTimeOffs, CategoryServices, \
     CompanyCategories, CompanyEmails, CompanyPhones, Users
 from app.models.models import CompanyUsers, Companies
-from app.schemas import CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, UserCreate, CompanyUser
+from app.schemas import CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, UserCreate, CompanyUser, \
+    CompanyUserUpdate
 from app.schemas.schemas import (
     CompanyCreate,
     User
@@ -296,6 +297,8 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
     Returns:
         CompanyUsers object with the user relationship
     """
+    from app.services.crud import user_availability as crud_user_availability
+
     # Check if user with this email already exists
     existing_user = db.query(Users).filter(Users.email == user_in.email).first()
 
@@ -319,10 +322,15 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
         db.add(company_user)
         db.commit()
         db.refresh(company_user)
+
+        # Handle availabilities for existing user
+        if user_in.availabilities:
+            crud_user_availability.update_user_availabilities(db, str(existing_user.id), user_in.availabilities)
+
         return company_user
 
     # Create new user
-    user_data = user_in.model_dump()
+    user_data = user_in.model_dump(exclude={'availabilities'})
     user_data['password'] = hash_password(user_data['password'])
 
     new_user = Users(**user_data)
@@ -344,22 +352,28 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
     db.commit()
     db.refresh(company_user)
 
+    # Handle availabilities for new user
+    if user_in.availabilities:
+        crud_user_availability.bulk_create_user_availabilities(db, str(new_user.id), user_in.availabilities)
+
     return company_user
 
 
-def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: dict) -> Optional[CompanyUsers]:
+def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: CompanyUserUpdate) -> Optional[CompanyUsers]:
     """
-    Update a company user's role or status.
+    Update a company user's role, status, user profile fields, and availabilities.
 
     Args:
         db: Database session
         company_id: Company ID
         user_id: User ID to update
-        obj_in: Data to update (role, status)
+        obj_in: Data to update (role, status, user fields, availabilities)
 
     Returns:
         Updated CompanyUsers object or None if not found
     """
+    from app.services.crud import user_availability as crud_user_availability
+
     company_user = db.query(CompanyUsers).filter(
         CompanyUsers.company_id == company_id,
         CompanyUsers.user_id == user_id
@@ -368,10 +382,27 @@ def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: d
     if not company_user:
         return None
 
-    # Update fields
+    # Extract availabilities if present
+    availabilities = obj_in.availabilities
+    obj_in = obj_in.model_dump(exclude={'availabilities'})
+
+    # Separate company_user fields from user fields
+    company_user_fields = {'role', 'status'}
+    user_fields = {'first_name', 'last_name', 'phone', 'languages', 'position', 'profile_photo_url'}
+
+    # Update CompanyUsers fields
     for field, value in obj_in.items():
-        if hasattr(company_user, field):
+        if field in company_user_fields and hasattr(company_user, field) and value is not None:
             setattr(company_user, field, value)
+
+    # Update User fields
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if user:
+        for field, value in obj_in.items():
+            if field in user_fields and hasattr(user, field) and value is not None:
+                setattr(user, field, value)
+        user.updated_at = utcnow()
+        db.add(user)
 
     # Update timestamp
     company_user.updated_at = utcnow()
@@ -379,6 +410,10 @@ def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: d
     db.add(company_user)
     db.commit()
     db.refresh(company_user)
+
+    # Handle availabilities update
+    if availabilities is not None:
+        crud_user_availability.update_user_availabilities(db, user_id, availabilities)
 
     return company_user
 

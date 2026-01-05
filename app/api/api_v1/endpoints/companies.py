@@ -75,10 +75,14 @@ async def get_user_availability(
         # Get user's regular availability
         availabilities = crud_company.get_company_user_availabilities(db, user_id=user_id, company_id=company_id)
         if not availabilities:
-            response.status_code = status.HTTP_404_NOT_FOUND
-            return DataResponse.error_response(
-                message="No availability schedule found for this user",
-                status_code=status.HTTP_404_NOT_FOUND
+            response.status_code = status.HTTP_200_OK
+            return DataResponse.success_response(
+                data=AvailabilityResponse(
+                    user_id=None,
+                    availability_type=availability_type,
+                    daily=None
+                ),
+                message="No availability schedule found for this user"
             )
 
         # Get user's time-offs
@@ -656,7 +660,7 @@ async def update_company_member(
             db=db,
             company_id=company_id,
             user_id=user_id,
-            obj_in=update_data
+            obj_in=user_update
         )
 
         if not updated_company_user:

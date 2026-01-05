@@ -1,6 +1,7 @@
 from typing import List, Optional, Any
 from datetime import datetime, date, time, timedelta
 from sqlalchemy.orm import Session
+import uuid
 from app.models.models import UserAvailabilities, UserTimeOffs
 from app.models.enums import AvailabilityType
 from app.schemas.schemas import (
@@ -8,8 +9,70 @@ from app.schemas.schemas import (
     DailyAvailability,
     WeeklyAvailability,
     MonthlyAvailability,
-    AvailabilityResponse
+    AvailabilityResponse,
+    UserAvailabilityCreate
 )
+from app.core.datetime_utils import utcnow
+
+
+def create_user_availability(db: Session, user_id: str, availability_in: UserAvailabilityCreate) -> UserAvailabilities:
+    """Create a new availability entry for a user"""
+    db_availability = UserAvailabilities(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        day_of_week=availability_in.day_of_week,
+        start_time=availability_in.start_time,
+        end_time=availability_in.end_time,
+        is_available=availability_in.is_available,
+        created_at=utcnow(),
+        updated_at=utcnow()
+    )
+    db.add(db_availability)
+    db.commit()
+    db.refresh(db_availability)
+    return db_availability
+
+
+def bulk_create_user_availabilities(db: Session, user_id: str, availabilities: List[UserAvailabilityCreate]) -> List[UserAvailabilities]:
+    """Create multiple availability entries for a user"""
+    db_availabilities = []
+    for availability_in in availabilities:
+        db_availability = UserAvailabilities(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            day_of_week=availability_in.day_of_week,
+            start_time=availability_in.start_time,
+            end_time=availability_in.end_time,
+            is_available=availability_in.is_available,
+            created_at=utcnow(),
+            updated_at=utcnow()
+        )
+        db_availabilities.append(db_availability)
+    
+    db.add_all(db_availabilities)
+    db.commit()
+    for db_availability in db_availabilities:
+        db.refresh(db_availability)
+    return db_availabilities
+
+
+def delete_user_availabilities(db: Session, user_id: str) -> bool:
+    """Delete all availability entries for a user"""
+    db.query(UserAvailabilities).filter(UserAvailabilities.user_id == user_id).delete()
+    db.commit()
+    return True
+
+
+def update_user_availabilities(db: Session, user_id: str, availabilities: List[UserAvailabilityCreate]) -> List[UserAvailabilities]:
+    """Replace all availability entries for a user with new ones"""
+    # Delete existing availabilities
+    delete_user_availabilities(db, user_id)
+    
+    # Create new availabilities
+    if availabilities:
+        return bulk_create_user_availabilities(db, user_id, availabilities)
+    return []
+
 
 def get_user_availabilities(db: Session, user_id: str) -> List[UserAvailabilities]:
     """Get all availability entries for a user"""

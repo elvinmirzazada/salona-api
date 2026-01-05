@@ -26,8 +26,35 @@ class UserBase(BaseModel):
     profile_photo_url: Optional[str] = None
 
 
+# User Availability schemas
+class UserAvailabilityBase(BaseModel):
+    day_of_week: int = Field(..., ge=0, le=6, description="Day of week: 0=Monday, 6=Sunday")
+    start_time: time
+    end_time: time
+    is_available: bool = True
+
+
+class UserAvailabilityCreate(UserAvailabilityBase):
+    pass
+
+
+class UserAvailabilityUpdate(BaseModel):
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    is_available: Optional[bool] = None
+
+
+class UserAvailability(UserAvailabilityBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    user_id: UUID4
+
+
+
 class UserCreate(UserBase):
     password: str
+    availabilities: Optional[List[UserAvailabilityCreate]] = []
 
 
 class UserUpdate(BaseModel):
@@ -38,6 +65,7 @@ class UserUpdate(BaseModel):
     languages: Optional[str] = None
     position: Optional[str] = None
     profile_photo_url: Optional[str] = None
+    availabilities: Optional[List[UserAvailabilityCreate]] = None
 
 
 class User(UserBase, TimestampedModel):
@@ -62,6 +90,7 @@ class CompanyUser(TimestampedModel):
 class CompanyUserUpdate(BaseModel):
     role: Optional[str] = None
     status: Optional[StatusType] = None
+    availabilities: List[UserAvailabilityCreate] = []
 
 
 # Company schemas
