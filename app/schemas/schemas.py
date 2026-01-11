@@ -449,6 +449,10 @@ class CompanyAddressBase(BaseModel):
     is_primary: bool = False
 
 
+class CompanyAddressCreate(CompanyAddressBase):
+    pass
+
+
 class CompanyAddressResponse(CompanyAddressBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
 

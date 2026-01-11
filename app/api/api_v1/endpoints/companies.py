@@ -20,7 +20,7 @@ from app.schemas import (
     CompanyCreate, User, Company, AvailabilityResponse, AvailabilityType, CompanyUser, CompanyUserUpdate,
     CategoryServiceResponse, CompanyCategoryWithServicesResponse, Customer, TimeOff, CompanyUpdate,
     CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, CompanyPhone, UserCreate,
-    Invitation, InvitationCreate, InvitationAccept, CompanyAddressResponse, CompanyCustomer
+    Invitation, InvitationCreate, InvitationAccept, CompanyAddressResponse, CompanyAddressCreate, CompanyCustomer
 )
 from app.schemas.responses import DataResponse
 from app.services.crud import company as crud_company
@@ -409,6 +409,63 @@ async def get_company_address(
         db.rollback()
         return DataResponse.error_response(
             message=f"Failed to retrieve company address: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.post("/address", response_model=DataResponse[CompanyAddressResponse], status_code=status.HTTP_201_CREATED)
+async def create_company_address(
+    *,
+    db: Session = Depends(get_db),
+    address_in: CompanyAddressCreate,
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can add address
+) -> DataResponse:
+    """
+    Create or update a company address.
+    If an address already exists for the company, it will be updated.
+    Requires admin or owner role.
+    """
+    try:
+        # Check if address already exists for this company
+        existing_address = db.query(CompanyAddresses).filter(
+            CompanyAddresses.company_id == company_id
+        ).first()
+
+        if existing_address:
+            # Update existing address
+            for field, value in address_in.model_dump(exclude_unset=True).items():
+                setattr(existing_address, field, value)
+            existing_address.updated_at = datetime.now()
+            db.add(existing_address)
+            db.commit()
+            db.refresh(existing_address)
+
+            return DataResponse.success_response(
+                data=CompanyAddressResponse.model_validate(existing_address),
+                message="Company address updated successfully",
+                status_code=status.HTTP_200_OK
+            )
+        else:
+            # Create new address
+            new_address = CompanyAddresses(
+                id=uuid.uuid4(),
+                company_id=company_id,
+                **address_in.model_dump()
+            )
+            db.add(new_address)
+            db.commit()
+            db.refresh(new_address)
+
+            return DataResponse.success_response(
+                data=CompanyAddressResponse.model_validate(new_address),
+                message="Company address created successfully",
+                status_code=status.HTTP_201_CREATED
+            )
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to save company address: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
