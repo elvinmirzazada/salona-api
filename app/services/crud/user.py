@@ -28,7 +28,7 @@ def get_by_email(db: Session, email: str) -> Optional[Users]:
 
 
 def create(db: Session, *, obj_in: UserCreate) -> Users:
-    db_obj = Users(**obj_in.model_dump())
+    db_obj = Users(**obj_in.model_dump(exclude={'availabilities'}))
     db_obj.id = str(uuid.uuid4())
     db.add(db_obj)
     db.commit()

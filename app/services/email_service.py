@@ -2,8 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 from sqlalchemy.orm import Session
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
+from mailersend import MailerSendClient, EmailBuilder, EmailContact
 
 from app.core.config import settings
 from app.models.models import CustomerVerifications, UserVerifications
@@ -11,7 +10,7 @@ from app.models.enums import VerificationType, VerificationStatus
 
 
 class EmailService:
-    """Service for sending emails via SendGrid - works for both users and customers"""
+    """Service for sending emails via MailerSend - works for both users and customers"""
 
     def __init__(
         self,
@@ -19,9 +18,9 @@ class EmailService:
         from_email: Optional[str] = None,
         from_name: Optional[str] = None
     ):
-        self.api_key = api_key or getattr(settings, 'SENDGRID_API_KEY', '')
-        self.from_email = from_email or getattr(settings, 'SENDGRID_FROM_EMAIL', '')
-        self.from_name = from_name or getattr(settings, 'SENDGRID_FROM_NAME', 'Salona')
+        self.api_key = api_key or getattr(settings, 'MAILERSEND_API_KEY', '')
+        self.from_email = from_email or getattr(settings, 'MAILERSEND_FROM_EMAIL', '')
+        self.from_name = from_name or getattr(settings, 'MAILERSEND_FROM_NAME', 'Salona')
 
     def _send_email(
         self,
@@ -31,7 +30,7 @@ class EmailService:
         text_content: Optional[str] = None
     ) -> bool:
         """
-        Send an email via SendGrid
+        Send an email via MailerSend
 
         Args:
             to_email: Recipient email address
@@ -45,31 +44,30 @@ class EmailService:
         try:
             # Validate API key
             if not self.api_key:
-                print("Error: SendGrid API key is not configured")
+                print("Error: MailerSend API key is not configured")
                 return False
 
-            # Create SendGrid message
-            message = Mail(
-                from_email=Email(self.from_email, self.from_name),
-                to_emails=To(to_email),
-                subject=subject,
-                plain_text_content=Content("text/plain", text_content or ""),
-                html_content=Content("text/html", html_content)
-            )
+            # Create MailerSend client
+            client = MailerSendClient(self.api_key)
 
-            # Send email using SendGrid API
-            sg = SendGridAPIClient(self.api_key)
-            response = sg.send(message)
+            # Build email using EmailBuilder
+            email = (EmailBuilder()
+                     .from_email(self.from_email, self.from_name)
+                     .to_many([{"email": to_email, "name": "Recipient"}])
+                     .subject(subject)
+                     .html(html_content)
+                     .text(text_content)
+                     .build())
 
-            # Check if email was sent successfully (2xx status codes)
-            if 200 <= response.status_code < 300:
-                return True
-            else:
-                print(f"SendGrid API returned status code: {response.status_code}")
-                return False
+            # Send email using MailerSend API
+            response = client.emails.send(email)
+
+            # Check if email was sent successfully
+            # MailerSend returns None on success, raises exception on failure
+            return True
 
         except Exception as e:
-            print(f"Error sending email via SendGrid: {str(e)}")
+            print(f"Error sending email via MailerSend: {str(e)}")
             return False
     
     def send_verification_email(
