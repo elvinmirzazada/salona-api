@@ -2,7 +2,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 from sqlalchemy.orm import Session
-from mailersend import MailerSendClient, EmailBuilder, EmailContact
+from mailersend import MailerSendClient, EmailBuilder
+from icalendar import Calendar, Event as ICalEvent
 
 from app.core.config import settings
 from app.models.models import CustomerVerifications, UserVerifications
@@ -27,7 +28,8 @@ class EmailService:
         to_email: str,
         subject: str,
         html_content: str,
-        text_content: Optional[str] = None
+        text_content: Optional[str] = None,
+        attachments: Optional[list] = None
     ) -> bool:
         """
         Send an email via MailerSend
@@ -37,7 +39,8 @@ class EmailService:
             subject: Email subject
             html_content: HTML content of the email
             text_content: Plain text fallback content
-            
+            attachments: List of attachment dicts with 'content', 'filename', and 'content_type'
+
         Returns:
             bool: True if email sent successfully, False otherwise
         """
@@ -51,13 +54,22 @@ class EmailService:
             client = MailerSendClient(self.api_key)
 
             # Build email using EmailBuilder
-            email = (EmailBuilder()
+            email_builder = (EmailBuilder()
                      .from_email(self.from_email, self.from_name)
                      .to_many([{"email": to_email, "name": "Recipient"}])
                      .subject(subject)
                      .html(html_content)
-                     .text(text_content)
-                     .build())
+                     .text(text_content))
+
+            # Add attachments if provided
+            if attachments:
+                for attachment in attachments:
+                    email_builder.attach_content(
+                        content=attachment['content'],
+                        filename=attachment['filename']
+                    )
+
+            email = email_builder.build()
 
             # Send email using MailerSend API
             response = client.emails.send(email)
@@ -513,7 +525,7 @@ class EmailService:
 
         return self._send_email(to_email, subject, html_content, text_content)
 
-    def send_booking_request_to_staff_email(
+    def send_booking_request_to_business_email(
         self,
         to_email: str,
         staff_name: str,
@@ -682,19 +694,25 @@ class EmailService:
         booking_date: str,
         services: list,
         total_price: Optional[float] = None,
-        booking_notes: Optional[str] = None
+        booking_notes: Optional[str] = None,
+        start_datetime: Optional[datetime] = None,
+        end_datetime: Optional[datetime] = None,
+        location: Optional[str] = None
     ) -> bool:
         """
-        Send booking confirmation email to customer
+        Send booking confirmation email to customer with Google Calendar invitation
 
         Args:
             to_email: Customer's email address
             customer_name: Customer's name
             company_name: Company name
-            booking_date: Date of the booking (formatted string)
+            booking_date: Date of the booking (formatted string for display)
             services: List of service names for the booking
             total_price: Total price of the booking
             booking_notes: Optional notes from the customer
+            start_datetime: Start datetime of the booking (for calendar)
+            end_datetime: End datetime of the booking (for calendar)
+            location: Location/address of the booking
 
         Returns:
             bool: True if email sent successfully
@@ -784,6 +802,13 @@ class EmailService:
                     </p>
                 </div>
                 
+                <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #28a745;">
+                    <p style="margin: 0; color: #155724;">
+                        <strong>📅 Calendar Invitation:</strong> A calendar invitation (.ics file) is attached to this email. 
+                        Click on it to add this appointment to your calendar (Google Calendar, Outlook, Apple Calendar, etc.).
+                    </p>
+                </div>
+                
                 <p style="text-align: center; margin: 20px 0;">
                     We look forward to seeing you!
                 </p>
@@ -820,12 +845,40 @@ class EmailService:
         
         Important: Please arrive 5-10 minutes before your appointment time.
         
+        📅 A calendar invitation (.ics file) is attached to this email. Click on it to add this appointment to your calendar.
+        
         We look forward to seeing you!
         
         © {datetime.now().year} Salona. All rights reserved.
         """
 
-        return self._send_email(to_email, subject, html_content, text_content)
+        # Generate calendar invitation if datetime is provided
+        attachments = None
+        if start_datetime and end_datetime:
+            # Create event description with services
+            services_list = ", ".join(services) if services else "Booking"
+            event_description = f"Booking at {company_name}\n\nServices: {services_list}"
+            if booking_notes:
+                event_description += f"\n\nNotes: {booking_notes}"
+
+            # Generate calendar invitation
+            ical_content = self._generate_calendar_invitation(
+                event_title=f"Appointment at {company_name}",
+                event_description=event_description,
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
+                location=location,
+                organizer_email=self.from_email,
+                attendee_email=to_email
+            )
+
+            attachments = [{
+                'content': ical_content,
+                'filename': 'booking_invitation.ics',
+                'content_type': 'text/calendar; method=REQUEST'
+            }]
+
+        return self._send_email(to_email, subject, html_content, text_content, attachments)
 
     def send_booking_cancellation_to_customer_email(
         self,
@@ -1113,6 +1166,72 @@ class EmailService:
         """
 
         return self._send_email(to_email, subject, html_content, text_content)
+
+    @staticmethod
+    def _generate_calendar_invitation(
+        event_title: str,
+        event_description: str,
+        start_datetime: datetime,
+        end_datetime: datetime,
+        location: Optional[str] = None,
+        organizer_email: Optional[str] = None,
+        attendee_email: Optional[str] = None
+    ) -> str:
+        """
+        Generate iCalendar format invitation
+
+        Args:
+            event_title: Title of the event
+            event_description: Description of the event
+            start_datetime: Start date and time (must be timezone-aware)
+            end_datetime: End date and time (must be timezone-aware)
+            location: Location of the event
+            organizer_email: Email of the organizer
+            attendee_email: Email of the attendee
+
+        Returns:
+            Base64 encoded iCalendar content
+        """
+        # Ensure datetime objects are timezone-aware
+        if start_datetime.tzinfo is None:
+            start_datetime = start_datetime.replace(tzinfo=timezone.utc)
+        if end_datetime.tzinfo is None:
+            end_datetime = end_datetime.replace(tzinfo=timezone.utc)
+
+        cal = Calendar()
+        cal.add('prodid', '-//Salona Booking System//salona.com//')
+        cal.add('version', '2.0')
+        cal.add('method', 'REQUEST') # Use REQUEST for invitations
+
+        event = ICalEvent()
+        event.add('uid', f'{uuid.uuid4()}@salona.com')
+        event.add('summary', event_title)
+        event.add('description', event_description)
+        event.add('dtstart', start_datetime)
+        event.add('dtend', end_datetime)
+        event.add('dtstamp', datetime.now(timezone.utc))
+        event.add('status', 'CONFIRMED')
+        event.add('sequence', 0)
+
+        if location:
+            event.add('location', location)
+
+        if organizer_email:
+            event.add('organizer', f'mailto:{organizer_email}')
+
+        if attendee_email:
+            # Add attendee with proper parameters for better compatibility
+            event.add('attendee', attendee_email, parameters={
+                'CUTYPE': 'INDIVIDUAL',
+                'ROLE': 'REQ-PARTICIPANT',
+                'PARTSTAT': 'NEEDS-ACTION',
+                'RSVP': 'TRUE'
+            })
+
+        cal.add_component(event)
+
+        # Convert to bytes and then to base64
+        return cal.to_ical()
 
 
 def create_verification_token(

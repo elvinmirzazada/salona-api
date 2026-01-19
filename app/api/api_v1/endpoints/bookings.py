@@ -697,12 +697,28 @@ async def confirm_booking(
         db.commit()
         company = crud_company.get(db, id=confirmed_booking.company_id)
 
+        # Get company address for calendar location
+        from app.models.models import CompanyAddresses
+        company_address = db.query(CompanyAddresses).filter(
+            CompanyAddresses.company_id == confirmed_booking.company_id
+        ).first()
+
+        # Format location string
+        location = None
+        if company_address:
+            location = f"{company_address.address}, {company_address.city}, {company_address.country}"
+            if company_address.zip:
+                location = f"{company_address.address}, {company_address.city}, {company_address.zip}, {company_address.country}"
+
         email_service.send_booking_confirmation_to_customer_email(
             to_email=confirmed_booking.customer.email,
             customer_name=confirmed_booking.customer.first_name,
             company_name=company.name,
             booking_date=confirmed_booking.start_at.isoformat(),
-            services=[service.category_service.name for service in confirmed_booking.booking_services]
+            services=[service.category_service.name for service in confirmed_booking.booking_services],
+            start_datetime=confirmed_booking.start_at,
+            end_datetime=confirmed_booking.end_at,
+            location=location
         )
         response.status_code = status.HTTP_200_OK
         return DataResponse.success_response(
