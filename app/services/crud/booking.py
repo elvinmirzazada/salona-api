@@ -114,7 +114,8 @@ def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Booking
         start_at=start_time_utc,
         end_at=end_time_utc,
         total_price=total_price,
-        notes=obj_in.notes
+        notes=obj_in.notes,
+        status=BookingStatus.CONFIRMED
     )
     db.add(db_obj)
     db.commit()

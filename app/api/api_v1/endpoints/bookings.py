@@ -152,13 +152,36 @@ async def create_booking(
             )
         )
 
+        # Get company address for calendar location
+        from app.models.models import CompanyAddresses
+        company_address = db.query(CompanyAddresses).filter(
+            CompanyAddresses.company_id == selected_company.id
+        ).first()
+        location = None
+        if company_address:
+            location = f"{company_address.address}, {company_address.city}, {company_address.country}"
+            if company_address.zip:
+                location = f"{company_address.address}, {company_address.city}, {company_address.zip}, {company_address.country}"
+
+        _ = email_service.send_booking_confirmation_to_customer_email(
+            to_email=customer.email,
+            customer_name=customer.first_name,
+            company_name=selected_company.name,
+            booking_date=booking.start_at.isoformat(),
+            services=[service.category_service.name for service in booking.booking_services],
+            start_datetime=booking.start_at,
+            end_datetime=booking.end_at,
+            booking_id=booking.id,
+            location=location
+        )
+
         for user_id, item in selected_company_users.items():
             selected_service_names = []
             company_user = item[0][0]
             for user, company_service in item:
                 selected_service_names.append(company_service.name)
             # Send email notification to assigned staff member
-            _ = email_service.send_booking_request_to_staff_email(
+            _ = email_service.send_booking_request_to_business_email(
                 to_email=company_user.email,
                 staff_name=company_user.first_name,
                 customer_name=booking_in.customer_info.first_name + ' ' + booking_in.customer_info.last_name,

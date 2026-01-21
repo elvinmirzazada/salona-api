@@ -574,21 +574,21 @@ class EmailService:
 
         # Action buttons
         action_buttons = ""
-        if booking_id:
-            confirm_url = f"{settings.FRONTEND_URL}/bookings/{booking_id}/confirm"
-            cancel_url = f"{settings.FRONTEND_URL}/bookings/{booking_id}/cancel"
-            action_buttons = f"""
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{confirm_url}" 
-                   style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; margin: 0 10px;">
-                    Confirm Booking
-                </a>
-                <a href="{cancel_url}" 
-                   style="background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; margin: 0 10px;">
-                    Cancel Booking
-                </a>
-            </div>
-            """
+        # if booking_id:
+        #     confirm_url = f"{settings.FRONTEND_URL}/bookings/{booking_id}/confirm"
+        #     cancel_url = f"{settings.FRONTEND_URL}/bookings/{booking_id}/cancel"
+        #     action_buttons = f"""
+        #     <div style="text-align: center; margin: 30px 0;">
+        #         <a href="{confirm_url}"
+        #            style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; margin: 0 10px;">
+        #             Confirm Booking
+        #         </a>
+        #         <a href="{cancel_url}"
+        #            style="background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; margin: 0 10px;">
+        #             Cancel Booking
+        #         </a>
+        #     </div>
+        #     """
 
         html_content = f"""
         <!DOCTYPE html>
@@ -635,8 +635,6 @@ class EmailService:
                 </div>
                 
                 {notes_html}
-                
-                <p style="color: #007bff; font-weight: bold;">Please review and take action on this booking request.</p>
                 
                 {action_buttons}
                 
@@ -697,7 +695,8 @@ class EmailService:
         booking_notes: Optional[str] = None,
         start_datetime: Optional[datetime] = None,
         end_datetime: Optional[datetime] = None,
-        location: Optional[str] = None
+        location: Optional[str] = None,
+        booking_id: Optional[str] = None
     ) -> bool:
         """
         Send booking confirmation email to customer with Google Calendar invitation
@@ -713,6 +712,7 @@ class EmailService:
             start_datetime: Start datetime of the booking (for calendar)
             end_datetime: End datetime of the booking (for calendar)
             location: Location/address of the booking
+            booking_id: Booking ID for action links
 
         Returns:
             bool: True if email sent successfully
@@ -748,6 +748,19 @@ class EmailService:
             <div style="background-color: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #007bff;">
                 <strong style="color: #004085;">Your Notes:</strong>
                 <p style="margin: 10px 0 0 0; color: #004085;">{booking_notes}</p>
+            </div>
+            """
+
+        # Action buttons
+        action_buttons = ""
+        if booking_id:
+            cancel_url = f"{settings.FRONTEND_URL}/bookings/{booking_id}/cancel"
+            action_buttons = f"""
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{cancel_url}"
+                   style="background-color: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; margin: 0 10px;">
+                    Cancel Booking
+                </a>
             </div>
             """
 
@@ -795,6 +808,10 @@ class EmailService:
                 </div>
                 
                 {notes_html}
+                
+                <p style="color: #007bff; font-weight: bold;">You can cancel the booking though this button.</p>
+                
+                {action_buttons}
                 
                 <div style="background-color: #d1ecf1; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #17a2b8;">
                     <p style="margin: 0; color: #0c5460;">
