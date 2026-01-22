@@ -120,7 +120,7 @@ def subtract_intervals(base_start: time, base_end: time, intervals: List[tuple])
         result = new_result
     return result
 
-def get_daily_slots(target_date: date, availabilities: List[UserAvailabilities], time_offs: List[UserTimeOffs], bookings: List[Any]) -> DailyAvailability:
+def get_daily_slots(target_date: date, availabilities: List[UserAvailabilities], time_offs: List[UserTimeOffs], bookings: List[Any], service_duration_minutes: Optional[int] = None) -> DailyAvailability:
     day_of_week = target_date.weekday()
     day_availabilities = [a for a in availabilities if a.day_of_week == day_of_week]
     # Collect intervals to subtract (bookings and time-offs)
@@ -136,12 +136,32 @@ def get_daily_slots(target_date: date, availabilities: List[UserAvailabilities],
     for avail in day_availabilities:
         available_intervals = subtract_intervals(avail.start_time, avail.end_time, subtract_intervals_list)
         for start, end in available_intervals:
-            if start < end:
-                time_slots.append(TimeSlot(
-                    start_time=start,
-                    end_time=end,
-                    is_available=True
-                ))
+            # If service_duration_minutes is provided, filter slots that don't have enough time
+            if service_duration_minutes:
+                # Calculate the duration of this slot in minutes
+                start_datetime = datetime.combine(target_date, start)
+                end_datetime = datetime.combine(target_date, end)
+                slot_duration_minutes = (end_datetime - start_datetime).total_seconds() / 60
+
+                # Only include slots that have enough time for the service
+                # Adjust end_time to be service_duration_minutes before the actual end
+                if slot_duration_minutes >= service_duration_minutes:
+                    # Calculate the last possible start time
+                    last_start_time = (datetime.combine(target_date, end) - timedelta(minutes=service_duration_minutes)).time()
+                    if start < last_start_time:
+                        time_slots.append(TimeSlot(
+                            start_time=start,
+                            end_time=last_start_time,
+                            is_available=True
+                        ))
+            else:
+                # No service duration provided, include the full slot
+                if start < end:
+                    time_slots.append(TimeSlot(
+                        start_time=start,
+                        end_time=end,
+                        is_available=True
+                    ))
     return DailyAvailability(
         date=target_date,
         time_slots=time_slots
@@ -152,7 +172,8 @@ def calculate_availability(
     time_offs: List[UserTimeOffs],
     bookings: List[Any],
     availability_type: AvailabilityType,
-    date_from: date
+    date_from: date,
+    service_duration_minutes: Optional[int] = None
 ) -> AvailabilityResponse:
     """Calculate availability based on working hours, time-offs, and bookings"""
     try:
@@ -165,7 +186,7 @@ def calculate_availability(
                 monthly=None
             )
         if availability_type == AvailabilityType.DAILY:
-            daily = get_daily_slots(date_from, availabilities, time_offs, bookings)
+            daily = get_daily_slots(date_from, availabilities, time_offs, bookings, service_duration_minutes)
             return AvailabilityResponse(
                 user_id=str(availabilities[0].user_id),
                 availability_type=availability_type,
@@ -177,7 +198,7 @@ def calculate_availability(
             daily_slots = []
             current_date = week_start
             while current_date <= week_end:
-                daily_slots.append(get_daily_slots(current_date, availabilities, time_offs, bookings))
+                daily_slots.append(get_daily_slots(current_date, availabilities, time_offs, bookings, service_duration_minutes))
                 current_date += timedelta(days=1)
             weekly = WeeklyAvailability(
                 week_start_date=week_start,
@@ -204,7 +225,7 @@ def calculate_availability(
                 week_date = week_start
                 while week_date <= week_end:
                     if month_start <= week_date <= month_end:
-                        daily_slots.append(get_daily_slots(week_date, availabilities, time_offs, bookings))
+                        daily_slots.append(get_daily_slots(week_date, availabilities, time_offs, bookings, service_duration_minutes))
                     week_date += timedelta(days=1)
                 weekly_slots.append(WeeklyAvailability(
                     week_start_date=week_start,

@@ -61,6 +61,7 @@ async def get_user_availability(
         user_id: str,
         availability_type: AvailabilityType = Query(..., description="Type of availability check: daily, weekly, or monthly"),
         date_from: date = Query(..., description="Start date for availability check"),
+        service_ids: List[str] = Query(None, description="List of service IDs to calculate availability based on combined service duration"),
         response: Response,
         db: Session = Depends(get_db),
         company_id: str
@@ -70,8 +71,20 @@ async def get_user_availability(
     - daily: Shows available time slots for a specific date
     - weekly: Shows available time slots for a week starting from date_from
     - monthly: Shows available time slots for the month containing date_from
+
+    If service_ids are provided, the last available slot will be calculated based on the total duration of all services.
     """
     try:
+        # Calculate total service duration if service_ids are provided
+        service_duration_minutes = None
+        if service_ids:
+            total_duration = 0
+            for service_id in service_ids:
+                service = crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
+                if service:
+                    total_duration += service.duration
+            service_duration_minutes = total_duration if total_duration > 0 else None
+
         # Get user's regular availability
         availabilities = crud_company.get_company_user_availabilities(db, user_id=user_id, company_id=company_id)
         if not availabilities:
@@ -109,13 +122,14 @@ async def get_user_availability(
         )
 
         if availabilities:
-            # Calculate availability based on working hours, time-offs, and existing bookings
+            # Calculate availability based on working hours, time-offs, existing bookings, and service duration
             availability = crud_user_availability.calculate_availability(
                 availabilities=availabilities,
                 time_offs=time_offs,
                 bookings=bookings,
                 availability_type=availability_type,
-                date_from=date_from
+                date_from=date_from,
+                service_duration_minutes=service_duration_minutes
             )
 
             return DataResponse.success_response(
