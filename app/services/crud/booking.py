@@ -268,3 +268,18 @@ def complete(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
         db.flush()  # Flush to get the updated object but don't commit yet
         return db_obj
     return None
+
+
+def no_show(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
+    """
+    Mark a booking as NO_SHOW when the customer doesn't show up.
+    Returns the updated booking or None if booking not found.
+    """
+    db_obj = db.query(Bookings).filter(Bookings.id == booking_id).first()
+    if db_obj:
+        db_obj.status = BookingStatus.NO_SHOW
+        db.add(db_obj)
+        db.flush()  # Flush to get the updated object but don't commit yet
+        return db_obj
+    return None
+

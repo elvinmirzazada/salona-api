@@ -572,7 +572,95 @@ async def update_booking(
         db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
-            message=f"Failed to update booking: {str(e)}",
+            message=f"Failed to complete booking: {str(e)}",
+            data=None,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.put("/{booking_id}/no-show", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
+async def mark_booking_no_show(
+        *,
+        booking_id: str,
+        db: Session = Depends(get_db),
+        response: Response,
+        company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Mark a booking as NO_SHOW when the customer doesn't show up.
+    """
+    try:
+        booking_uuid = UUID4(booking_id)
+    except ValueError:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Invalid booking ID format"
+        )
+
+    # Get the existing booking
+    existing_booking = crud_booking.get(db=db, id=booking_uuid)
+    if not existing_booking:
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return DataResponse.error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            message="Booking not found"
+        )
+
+    # Verify that the booking belongs to the company
+    if str(existing_booking.company_id) != company_id:
+        response.status_code = status.HTTP_403_FORBIDDEN
+        return DataResponse.error_response(
+            status_code=status.HTTP_403_FORBIDDEN,
+            message="You don't have permission to modify this booking"
+        )
+
+    # Check if booking is already cancelled
+    if existing_booking.status == BookingStatus.CANCELLED:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Cannot mark a cancelled booking as no-show"
+        )
+
+    # Check if booking is already completed
+    if existing_booking.status == BookingStatus.COMPLETED:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Cannot mark a completed booking as no-show"
+        )
+
+    # Check if booking is already marked as no-show
+    if existing_booking.status == BookingStatus.NO_SHOW:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return DataResponse.error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Booking is already marked as no-show"
+        )
+
+    try:
+        # Use the CRUD no_show function to mark the booking as no-show
+        no_show_booking = crud_booking.no_show(db=db, booking_id=booking_uuid)
+        if not no_show_booking:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Booking not found"
+            )
+
+        db.commit()
+        response.status_code = status.HTTP_200_OK
+        return DataResponse.success_response(
+            message="Booking marked as no-show successfully",
+            data=no_show_booking,
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        db.rollback()
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return DataResponse.error_response(
+            message=f"Failed to mark booking as no-show: {str(e)}",
             data=None,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
