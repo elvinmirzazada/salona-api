@@ -483,7 +483,7 @@ async def delete_time_off(
     time_off_id: str,
     db: Session = Depends(get_db),
     response: Response,
-    current_user: User = Depends(get_current_active_user)
+    company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Delete a time off period.
@@ -495,14 +495,6 @@ async def delete_time_off(
         return DataResponse.error_response(
             message="Time off not found",
             status_code=status.HTTP_404_NOT_FOUND
-        )
-
-    # Check if the time off belongs to the current user
-    if str(time_off.user_id) != str(current_user.id):
-        response.status_code = status.HTTP_403_FORBIDDEN
-        return DataResponse.error_response(
-            message="You don't have permission to delete this time off",
-            status_code=status.HTTP_403_FORBIDDEN
         )
 
     # Delete the time off
