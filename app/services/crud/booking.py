@@ -48,7 +48,7 @@ def get_all_bookings_in_range_by_company(db: Session, company_id: str, start_dat
         Bookings.company_id == company_id,
         Bookings.start_at >= start_datetime,
         Bookings.end_at <= end_datetime,
-        Bookings.status.in_(['scheduled', 'confirmed', 'completed'])
+        Bookings.status.in_(['scheduled', 'confirmed', 'completed', 'no_show'])
     ).all()
 
 
