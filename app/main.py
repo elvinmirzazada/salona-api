@@ -29,6 +29,8 @@ origins = [
     "http://0.0.0.0:8010",
     "https://salona.me",
     "https://www.salona.me",
+    "https://www.test.salona.me",
+    "https://test.salona.me",
 ]
 
 app.add_middleware(
