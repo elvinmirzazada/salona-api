@@ -359,6 +359,7 @@ class CategoryServiceUpdate(BaseModel):
     buffer_after: Optional[int] = None
     staff_ids: Optional[List[UUID4]] = None  # List of staff member IDs to assign to this service
     image_url: Optional[str] = None
+    remove_image: Optional[bool] = False  # Set to True to remove the current image
 
 
 class CompanyCategoryBase(BaseModel):

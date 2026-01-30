@@ -176,7 +176,7 @@ async def create_service(
         *,
         db: Session = Depends(get_db),
         service_in: Annotated[str, Form(...)],
-        image: Annotated[UploadFile, File()] = None,
+        image: Annotated[UploadFile | None, File()] = None,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
@@ -253,7 +253,7 @@ async def update_service(
         db: Session = Depends(get_db),
         service_id: str,
         service_in: Annotated[str, Form(...)],
-        image: Annotated[UploadFile, File()] = None,
+        image: Annotated[UploadFile | None, File()] = None,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
@@ -270,12 +270,27 @@ async def update_service(
             detail="Service not found"
         )
 
-    # Upload image if provided
+    # Handle image removal
+    if service_in.remove_image and service.image_url:
+        try:
+            await file_storage_service.remove_file(service.image_url)
+            service_in.image_url = None
+        except Exception as e:
+            # Log the error but don't fail the update
+            print(f"Failed to remove image: {str(e)}")
+
+    # Upload new image if provided
     if image:
-        curren_image_url = service.image_url
+        # Remove old image if exists
+        if service.image_url:
+            try:
+                await file_storage_service.remove_file(service.image_url)
+            except Exception as e:
+                # Log the error but don't fail the update
+                print(f"Failed to remove old image: {str(e)}")
+
+        # Upload new image
         filename_prefix = f"{uuid.uuid4()}"
-        if curren_image_url:
-            filename_prefix = curren_image_url.split('/')[-2]
 
         file_content = await image.read()
         filename = f"services/{filename_prefix}/service.{image.filename.split('.')[-1]}"

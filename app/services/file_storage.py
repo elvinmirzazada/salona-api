@@ -27,5 +27,20 @@ class FileStorageService:
         except ClientError as e:
             raise Exception(f"S3 upload failed: {str(e)}")
 
+    async def remove_file(self, file_url: str) -> bool:
+        """Remove file from S3 using the public URL."""
+        try:
+            # Extract the key from the URL
+            # URL format: https://bucket-name.s3.region.amazonaws.com/key
+            key = file_url.split('.amazonaws.com/')[-1]
+
+            self.s3_client.delete_object(
+                Bucket=self.bucket_name,
+                Key=key
+            )
+            return True
+        except ClientError as e:
+            raise Exception(f"S3 deletion failed: {str(e)}")
+
 
 file_storage_service = FileStorageService()
