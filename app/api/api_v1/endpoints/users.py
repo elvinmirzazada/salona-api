@@ -64,12 +64,17 @@ async def _create_new_user(
 
     if send_verification_email:
         # Send verification email
-        user_name = f"{new_user.first_name} {new_user.last_name}"
-        email_sent = email_service.send_verification_email(
-            to_email=new_user.email,
-            verification_token=verification_record.token,
-            user_name=user_name
-        )
+        try:
+            user_name = f"{new_user.first_name} {new_user.last_name}"
+            email_sent = email_service.send_verification_email(
+                to_email=new_user.email,
+                verification_token=verification_record.token,
+                user_name=user_name
+            )
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error sending verification email: {str(e)}")
+            email_sent = False
 
         if not email_sent:
             raise Exception(f"Warning: Failed to send verification email to {new_user.email}")
