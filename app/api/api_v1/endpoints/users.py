@@ -112,7 +112,7 @@ async def create_user(
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
 
 
-@router.post("/auth/verify_email", response_model=DataResponse)
+@router.post("/auth/verify-email", response_model=DataResponse)
 async def verify_email(
     *,
     db: Session = Depends(get_db),
@@ -172,7 +172,6 @@ async def user_login(
     """
     Login professional using mobile number or email and return JWT tokens.
     """
-    from app.core.config import settings
 
     # Try to get professional by mobile number first
     user = crud_user.get_by_email(db, email=login_data.email)
@@ -225,21 +224,23 @@ async def logout_user(response: Response):
         cookie_domain = ".salona.me" if "salona.me" in settings.API_URL else None
         is_production = "https://" in settings.API_URL
 
-        # Delete cookies with the same parameters used when setting them
-        response.delete_cookie(
+        response.set_cookie(
             key="refresh_token",
-            domain=cookie_domain,
-            secure=is_production,
+            value='',
+            max_age=0,
             httponly=True,
-            samesite="lax"
+            secure=True,  # only over HTTPS
+            samesite="none"
         )
-        response.delete_cookie(
+        response.set_cookie(
             key="access_token",
-            domain=cookie_domain,
-            secure=is_production,
+            value='',
+            max_age=0,
             httponly=True,
-            samesite="lax"
+            secure=True,  # only over HTTPS
+            samesite="none"
         )
+
         return ResponseMessage(message="Logged out successfully", status="success")
     except Exception as e:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
