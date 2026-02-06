@@ -2,6 +2,7 @@ from typing import Optional, Dict, List
 from collections import defaultdict
 from pydantic.v1 import UUID4
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.models.models import CategoryServices, CompanyCategories, ServiceStaff, Users
 from app.schemas import CategoryServiceResponse, CompanyCategoryCreate, CompanyCategoryUpdate, CategoryServiceCreate, \
@@ -135,9 +136,28 @@ def delete_category(db: Session, category_id: str, company_id: str) -> bool:
 
 def get_company_categories(db: Session, company_id: str) -> List[CompanyCategories]:
     """
-    Get all categories for a specific company
+    Get all categories for a specific company with services count
     """
-    return db.query(CompanyCategories).filter(CompanyCategories.company_id == company_id).all()
+    # Query categories with service count
+    categories = (
+        db.query(
+            CompanyCategories,
+            func.count(CategoryServices.id).label('services_count')
+        )
+        .outerjoin(CategoryServices, CompanyCategories.id == CategoryServices.category_id)
+        .filter(CompanyCategories.company_id == company_id)
+        .group_by(CompanyCategories.id)
+        .all()
+    )
+
+    # Build result with services_count
+    result = []
+    for category, count in categories:
+        # Set the services_count attribute
+        category.services_count = count
+        result.append(category)
+
+    return result
 
 
 def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServices:

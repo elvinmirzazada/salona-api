@@ -379,6 +379,7 @@ class CompanyCategory(CompanyCategoryBase, TimestampedModel):
 
     id: UUID4
     company_id: UUID4
+    services_count: int = 0  # Optional field to store the count of services in this category
 
 
 # CompanyCategoryWithServicesResponse already exists

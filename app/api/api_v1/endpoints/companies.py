@@ -484,7 +484,7 @@ async def create_company_address(
         )
 
 
-@router.put("", response_model=DataResponse[Company])
+@router.patch("", response_model=DataResponse[Company])
 async def update_company(
     *,
     db: Session = Depends(get_db),
