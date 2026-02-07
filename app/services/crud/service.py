@@ -61,10 +61,16 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
         comp_categories[(service[0], service[1], service[3])].append(CategoryServiceResponse(
             id=service[2].id,
             name=service[2].name,
+            name_en=service[2].name_en,
+            name_ee=service[2].name_ee,
+            name_ru=service[2].name_ru,
             duration=service[2].duration,
-            discount_price=service[2].discount_price / 100,
-            price=service[2].price / 100,
+            discount_price=service[2].discount_price,
+            price=service[2].price,
             additional_info=service[2].additional_info,
+            additional_info_en=service[2].additional_info_en,
+            additional_info_ee=service[2].additional_info_ee,
+            additional_info_ru=service[2].additional_info_ru,
             status=service[2].status,
             buffer_before=service[2].buffer_before,
             buffer_after=service[2].buffer_after,
@@ -97,7 +103,12 @@ def create_category(db: Session, obj_in: CompanyCategoryCreate) -> CompanyCatego
     """
     db_obj = CompanyCategories(
         name=obj_in.name,
-        description=obj_in.description,
+        name_en=obj_in.name_en,
+        name_ru=obj_in.name_ru,
+        name_ee=obj_in.name_ee,
+        description_en=obj_in.description_en,
+        description_ee=obj_in.description_ee,
+        description_ru=obj_in.description_ru,
         company_id=obj_in.company_id
     )
 
@@ -138,26 +149,7 @@ def get_company_categories(db: Session, company_id: str) -> List[CompanyCategori
     """
     Get all categories for a specific company with services count
     """
-    # Query categories with service count
-    categories = (
-        db.query(
-            CompanyCategories,
-            func.count(CategoryServices.id).label('services_count')
-        )
-        .outerjoin(CategoryServices, CompanyCategories.id == CategoryServices.category_id)
-        .filter(CompanyCategories.company_id == company_id)
-        .group_by(CompanyCategories.id)
-        .all()
-    )
-
-    # Build result with services_count
-    result = []
-    for category, count in categories:
-        # Set the services_count attribute
-        category.services_count = count
-        result.append(category)
-
-    return result
+    return db.query(CompanyCategories).filter(CompanyCategories.company_id == company_id).all()
 
 
 def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServices:
@@ -167,10 +159,15 @@ def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServic
     db_obj = CategoryServices(
         category_id=obj_in.category_id,
         name=obj_in.name,
+        name_en=obj_in.name_en,
+        name_ee=obj_in.name_ee,
+        name_ru=obj_in.name_ru,
         duration=obj_in.duration,
         price=int(obj_in.price * 100),  # Store price in cents
         discount_price=int(obj_in.discount_price * 100),
-        additional_info=obj_in.additional_info,
+        additional_info_ee=obj_in.additional_info_ee,
+        additional_info_en=obj_in.additional_info_en,
+        additional_info_ru=obj_in.additional_info_ru,
         status=obj_in.status,
         buffer_before=obj_in.buffer_before,
         buffer_after=obj_in.buffer_after,

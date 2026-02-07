@@ -578,7 +578,7 @@ async def update_booking(
         )
 
 
-@router.put("/{booking_id}/no-show", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
+@router.patch("/{booking_id}/no-show", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
 async def mark_booking_no_show(
         *,
         booking_id: str,
@@ -742,7 +742,7 @@ async def delete_booking(
         )
 
 
-@router.put("/{booking_id}/confirm", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
+@router.patch("/{booking_id}/confirm", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
 async def confirm_booking(
         *,
         booking_id: str,
@@ -847,7 +847,7 @@ async def confirm_booking(
         )
 
 
-@router.put("/{booking_id}/complete", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
+@router.patch("/{booking_id}/complete", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
 async def complete_booking(
         *,
         booking_id: str,

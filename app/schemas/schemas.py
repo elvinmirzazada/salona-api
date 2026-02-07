@@ -229,11 +229,17 @@ class CategoryServiceResponse(BaseModel):
 
     id: UUID4
     name: str
+    name_en: Optional[str] = None
+    name_ee: Optional[str] = None
+    name_ru: Optional[str] = None
     duration: int
     price: float
     discount_price: Optional[float] = None
     status: StatusType
     additional_info: Optional[str] = None
+    additional_info_en: Optional[str] = None
+    additional_info_ee: Optional[str] = None
+    additional_info_ru: Optional[str] = None
     buffer_before: Optional[int] = 0
     buffer_after: Optional[int] = 0
     image_url: Optional[str] = None
@@ -335,10 +341,16 @@ class AvailabilityResponse(BaseModel):
 
 class CategoryServiceBase(BaseModel):
     name: str
+    name_en: Optional[str] = None
+    name_ee: Optional[str] = None
+    name_ru: Optional[str] = None
     duration: int
     price: float
     discount_price: Optional[float] = None
     additional_info: Optional[str] = None
+    additional_info_en: Optional[str] = None
+    additional_info_ee: Optional[str] = None
+    additional_info_ru: Optional[str] = None
     status: StatusType = StatusType.active
     buffer_before: Optional[int] = 0
     buffer_after: Optional[int] = 0
@@ -350,10 +362,16 @@ class CategoryServiceCreate(CategoryServiceBase):
 
 class CategoryServiceUpdate(BaseModel):
     name: Optional[str] = None
+    name_en: Optional[str] = None
+    name_ee: Optional[str] = None
+    name_ru: Optional[str] = None
     duration: Optional[int] = None
     price: Optional[float] = None
     discount_price: Optional[float] = None
     additional_info: Optional[str] = None
+    additional_info_en: Optional[str] = None
+    additional_info_ee: Optional[str] = None
+    additional_info_ru: Optional[str] = None
     status: Optional[StatusType] = None
     buffer_before: Optional[int] = None
     buffer_after: Optional[int] = None
@@ -364,14 +382,26 @@ class CategoryServiceUpdate(BaseModel):
 
 class CompanyCategoryBase(BaseModel):
     name: str
+    name_en: Optional[str] = None
+    name_ee: Optional[str] = None
+    name_ru: Optional[str] = None
     description: Optional[str] = None
+    description_en: Optional[str] = None
+    description_ee: Optional[str] = None
+    description_ru: Optional[str] = None
 
 class CompanyCategoryCreate(CompanyCategoryBase):
     company_id: Optional[str] = None
 
 class CompanyCategoryUpdate(BaseModel):
     name: Optional[str] = None
+    name_en: Optional[str] = None
+    name_ee: Optional[str] = None
+    name_ru: Optional[str] = None
     description: Optional[str] = None
+    description_en: Optional[str] = None
+    description_ee: Optional[str] = None
+    description_ru: Optional[str] = None
     company_id: Optional[str] = None
 
 class CompanyCategory(CompanyCategoryBase, TimestampedModel):

@@ -3,11 +3,12 @@ import uuid
 from pydantic.v1 import create_model_from_typeddict
 from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID,
                         Time, Computed,
-                        CheckConstraint, false, BLOB, LargeBinary, Index)
+                        CheckConstraint, false, BLOB, LargeBinary, Index, select)
 from sqlalchemy.dialects.postgresql import ENUM as SQLAlchemyEnum
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, column_property
 from sqlalchemy.sql import func
 from sqlalchemy.sql import expression
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from app.db.base_class import BaseModel
 from app.models.enums import (StatusType, BookingStatus, CustomerStatusType, EmailStatusType,
@@ -246,11 +247,22 @@ class CompanyCategories(BaseModel):
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     name = Column(String(100), nullable=False)
+    name_en = Column(String(100), nullable=True)
+    name_ee = Column(String(100), nullable=True)
+    name_ru = Column(String(100), nullable=True)
     description = Column(Text)
+    description_en = Column(Text, nullable=True)
+    description_ee = Column(Text, nullable=True)
+    description_ru = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     category_service = relationship("CategoryServices", back_populates="company_category")
+
+    @hybrid_property
+    def services_count(self):
+        """Return the count of services in this category"""
+        return len(self.category_service) if self.category_service else 0
 
 
 class CategoryServices(BaseModel):
@@ -259,10 +271,16 @@ class CategoryServices(BaseModel):
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
     category_id = Column(UUID, ForeignKey("company_categories.id", ondelete="CASCADE"))
     name = Column(String(255))
+    name_en = Column(String(255), nullable=True)
+    name_ee = Column(String(255), nullable=True)
+    name_ru = Column(String(255), nullable=True)
     duration = Column(Integer)
     price = Column(Integer)
     discount_price = Column(Integer)
     additional_info = Column(Text)
+    additional_info_en = Column(Text, nullable=True)
+    additional_info_ee = Column(Text, nullable=True)
+    additional_info_ru = Column(Text, nullable=True)
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
     buffer_before = Column(Integer, default=0)  # in minutes
     buffer_after = Column(Integer, default=0)   # in minutes
