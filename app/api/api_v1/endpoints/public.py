@@ -3,7 +3,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timezone, date, timedelta
 from typing import List
-
+from pydantic.v1 import UUID4
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
 from sqlalchemy.orm import Session
 
@@ -357,3 +357,29 @@ async def create_booking(
             data=None,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+
+@router.get("/bookings/{booking_id}", response_model=DataResponse[Booking])
+def get_booking(
+        *,
+        booking_id: str,
+        db: Session = Depends(get_db),
+        response: Response
+) -> DataResponse:
+    """
+    Get booking by ID with details.
+    """
+    booking_id = UUID4(booking_id)
+    booking = crud_booking.get(db=db, id=booking_id)
+    if not booking:
+        response.status_code = status.HTTP_404_NOT_FOUND
+        raise DataResponse.error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            message="Booking not found"
+        )
+    response.status_code = status.HTTP_200_OK
+    return DataResponse.success_response(
+        message="",
+        data=booking,
+        status_code=status.HTTP_200_OK
+    )

@@ -31,33 +31,6 @@ router = APIRouter()
 security = HTTPBearer(auto_error=False)
 
 
-@router.get("/{booking_id}", response_model=DataResponse[Booking])
-def get_booking(
-        *,
-        booking_id: str,
-        db: Session = Depends(get_db),
-        # current_customer: Customer = Depends(get_current_active_customer),
-        response: Response
-) -> DataResponse:
-    """
-    Get booking by ID with details.
-    """
-    booking_id = UUID4(booking_id)
-    booking = crud_booking.get(db=db, id=booking_id)
-    if not booking:
-        response.status_code = status.HTTP_404_NOT_FOUND
-        raise DataResponse.error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            message="Booking not found"
-        )
-    response.status_code = status.HTTP_200_OK
-    return DataResponse.success_response(
-        message="",
-        data=booking,
-        status_code=status.HTTP_200_OK
-    )
-
-
 @router.get("", response_model=DataResponse[List[Booking]], status_code=status.HTTP_200_OK)
 async def get_all_bookings(
         *,
