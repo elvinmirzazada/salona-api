@@ -142,7 +142,7 @@ def get_daily_slots(target_date: date, availabilities: List[UserAvailabilities],
                 start_datetime = datetime.combine(target_date, start)
                 end_datetime = datetime.combine(target_date, end)
                 slot_duration_minutes = (end_datetime - start_datetime).total_seconds() / 60
-
+                
                 # Only include slots that have enough time for the service
                 # Adjust end_time to be service_duration_minutes before the actual end
                 if slot_duration_minutes >= service_duration_minutes:

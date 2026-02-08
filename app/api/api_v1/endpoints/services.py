@@ -8,21 +8,28 @@ from app.schemas.schemas import (CompanyCategoryWithServicesResponse, CompanyUse
 from app.schemas.responses import DataResponse
 import uuid
 import json
-from app.services.crud import service as crud_service, user as crud_user
+from app.services.crud import service as crud_service, user as crud_user, company as crud_company
 from app.services.file_storage import file_storage_service
 from app.api.dependencies import get_current_company_id
 
 router = APIRouter()
 
 
-@router.get("/companies/{company_id}/services", response_model=DataResponse[List[CompanyCategoryWithServicesResponse]])
+@router.get("/companies/{company_slug}/services", response_model=DataResponse[List[CompanyCategoryWithServicesResponse]])
 def get_company_services(
-    company_id: str,
+    company_slug: str,
     db: Session = Depends(get_db)
 ) -> DataResponse:
     """
     Get service by company ID with details.
     """
+    company = crud_company.get_by_slug(db=db, slug=company_slug)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+    company_id = str(company.id)
     services = crud_service.get_company_services(db=db, company_id=company_id)
     if not services:
         raise HTTPException(
@@ -35,14 +42,21 @@ def get_company_services(
     )
 
 
-@router.get("/companies/{company_id}/users", response_model=DataResponse[List[CompanyUser]])
+@router.get("/companies/{company_slug}/staff", response_model=DataResponse[List[CompanyUser]])
 def get_company_users(
-    company_id: str,
+    company_slug: str,
     db: Session = Depends(get_db)
 ) -> DataResponse:
     """
     Get users by company ID with details.
     """
+    company = crud_company.get_by_slug(db=db, slug=company_slug)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+    company_id = str(company.id)
     users = crud_user.get_company_users(db=db, company_id=company_id)
     if not users:
         raise HTTPException(
