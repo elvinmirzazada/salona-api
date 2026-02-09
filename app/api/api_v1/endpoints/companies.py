@@ -1,7 +1,7 @@
 import uuid
 from typing import List
 from datetime import date, timedelta, datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response, File, UploadFile
 from sqlalchemy.orm import Session
 from app.api.dependencies import (
     get_current_active_user,
@@ -517,6 +517,105 @@ async def update_company(
         db.rollback()
         return DataResponse.error_response(
             message=f"Failed to update company information: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.post("/logo", response_model=DataResponse[dict])
+async def upload_company_logo(
+    *,
+    db: Session = Depends(get_db),
+    file: UploadFile = File(...),
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can upload logo
+) -> DataResponse:
+    """
+    Upload company logo to S3 and update company record.
+    Requires admin or owner role.
+    """
+    try:
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
+        if file.content_type not in allowed_types:
+            return DataResponse.error_response(
+                message="Invalid file type. Only JPEG, PNG, and WebP are allowed",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate file size (e.g., max 5MB)
+        file_content = await file.read()
+        if len(file_content) > 5 * 1024 * 1024:
+            return DataResponse.error_response(
+                message="File size exceeds 5MB limit",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Upload to S3
+        from app.services.file_storage import file_storage_service
+        logo_url = await file_storage_service.upload_file(
+            file_content=file_content,
+            file_name=f"companies/{company_id}/logo.{file.filename.split('.')[-1]}",
+            content_type=file.content_type
+        )
+
+        # Update company record
+        company = crud_company.get(db=db, id=company_id)
+        if not company:
+            return DataResponse.error_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Company not found"
+            )
+
+        _ = crud_company.update(
+            db=db,
+            db_obj=company,
+            obj_in=CompanyUpdate(logo_url=logo_url)
+        )
+
+        return DataResponse.success_response(
+            message="Company logo uploaded successfully",
+            data={"logo_url": logo_url}
+        )
+    except Exception as e:
+        return DataResponse.error_response(
+            message=f"Failed to upload company logo: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@router.delete("/logo", response_model=DataResponse)
+async def delete_company_logo(
+    *,
+    db: Session = Depends(get_db),
+    company_id: str = Depends(get_current_company_id),
+    user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can delete logo
+) -> DataResponse:
+    """
+    Delete company logo and update company record.
+    Requires admin or owner role.
+    """
+    try:
+        # Get company
+        company = crud_company.get(db=db, id=company_id)
+        if not company:
+            return DataResponse.error_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Company not found"
+            )
+
+        # Update company record to remove logo
+        _ = crud_company.update(
+            db=db,
+            db_obj=company,
+            obj_in=CompanyUpdate(logo_url=None)
+        )
+
+        return DataResponse.success_response(
+            message="Company logo deleted successfully"
+        )
+    except Exception as e:
+        return DataResponse.error_response(
+            message=f"Failed to delete company logo: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 

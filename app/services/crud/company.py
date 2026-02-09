@@ -8,7 +8,7 @@ from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTime
     CompanyCategories, CompanyEmails, CompanyPhones, Users
 from app.models.models import CompanyUsers, Companies
 from app.schemas import CompanyEmailCreate, CompanyEmail, CompanyEmailBase, CompanyPhoneCreate, UserCreate, CompanyUser, \
-    CompanyUserUpdate
+    CompanyUserUpdate, CompanyUpdate
 from app.schemas.schemas import (
     CompanyCreate,
     User
@@ -109,7 +109,7 @@ def create(db: Session, *, obj_in: CompanyCreate, current_user: User) -> Compani
     return db_obj
 
 
-def update(db: Session, *, db_obj: Companies, obj_in: dict) -> Companies:
+def update(db: Session, *, db_obj: Companies, obj_in: CompanyUpdate) -> Companies:
     """
     Update company information
 
@@ -121,7 +121,8 @@ def update(db: Session, *, db_obj: Companies, obj_in: dict) -> Companies:
     Returns:
         Updated company object
     """
-    for field, value in obj_in.items():
+    update_data = obj_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
         setattr(db_obj, field, value)
     
     # Ensure updated_at is set to current UTC time
