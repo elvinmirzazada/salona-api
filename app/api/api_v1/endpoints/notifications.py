@@ -57,6 +57,23 @@ async def get_unread_count(
     )
 
 
+@router.get("/all-count", response_model=DataResponse[dict])
+async def get_all_count(
+    *,
+    db: Session = Depends(get_db),
+    company_id = Depends(get_current_company_id)
+) -> DataResponse[dict]:
+    """
+    Get count of all notifications for the current company
+    """
+    count = crud_notification.get_all_count(db=db, company_id=company_id)
+
+    return DataResponse.success_response(
+        data={'all_count': count},
+        message="All notifications count retrieved successfully"
+    )
+
+
 @router.get("/{notification_id}", response_model=DataResponse[Notification])
 async def get_notification(
     *,

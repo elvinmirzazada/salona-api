@@ -125,3 +125,11 @@ def get_unread_count(db: Session, company_id: UUID4) -> int:
             CompanyNotifications.status == NotificationStatus.UNREAD
         )
     ).scalar()
+
+
+def get_all_count(db: Session, company_id: UUID4) -> int:
+    """Get count of all notifications for a company"""
+    return db.query(func.count(CompanyNotifications.id)).filter(
+        CompanyNotifications.company_id == company_id
+    ).scalar()
+
