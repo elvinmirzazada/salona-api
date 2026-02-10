@@ -368,7 +368,7 @@ class CategoryServiceUpdate(BaseModel):
     name_ru: Optional[str] = None
     duration: Optional[int] = None
     price: Optional[float] = None
-    discount_price: Optional[float] = None
+    discount_price: Optional[float] = 0
     additional_info: Optional[str] = None
     additional_info_en: Optional[str] = None
     additional_info_ee: Optional[str] = None
