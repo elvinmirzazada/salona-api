@@ -320,60 +320,89 @@ async def update_service(
 ) -> DataResponse:
     """
     Update a service.
+    Can move service to a different category if the target category doesn't have subcategories.
     """
+    try:
+        service_in = CategoryServiceUpdate(**json.loads(service_in))
 
-    service_in = CategoryServiceUpdate(**json.loads(service_in))
+        # Verify the service exists and belongs to the company
+        service = crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
+        if not service:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Service not found"
+            )
 
-    # Verify the service exists and belongs to the company
-    service = crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
-    if not service:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found"
-        )
+        # Validate new category if being changed
+        if service_in.category_id and str(service_in.category_id) != str(service.category_id):
+            new_category = crud_service.get_category(db=db, category_id=str(service_in.category_id))
+            if not new_category:
+                return DataResponse.error_response(
+                    message="Target category not found",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
 
-    # Handle image removal
-    if service_in.remove_image and service.image_url:
-        try:
-            await file_storage_service.remove_file(service.image_url)
-            service_in.image_url = None
-        except Exception as e:
-            # Log the error but don't fail the update
-            print(f"Failed to remove image: {str(e)}")
+            if str(new_category.company_id) != company_id:
+                return DataResponse.error_response(
+                    message="Target category does not belong to this company",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
 
-    # Upload new image if provided
-    if image:
-        # Remove old image if exists
-        if service.image_url:
+        # Handle image removal
+        if service_in.remove_image and service.image_url:
             try:
                 await file_storage_service.remove_file(service.image_url)
+                service_in.image_url = None
             except Exception as e:
                 # Log the error but don't fail the update
-                print(f"Failed to remove old image: {str(e)}")
+                print(f"Failed to remove image: {str(e)}")
 
-        # Upload new image
-        filename_prefix = f"{uuid.uuid4()}"
+        # Upload new image if provided
+        if image:
+            # Remove old image if exists
+            if service.image_url:
+                try:
+                    await file_storage_service.remove_file(service.image_url)
+                except Exception as e:
+                    # Log the error but don't fail the update
+                    print(f"Failed to remove old image: {str(e)}")
 
-        file_content = await image.read()
-        filename = f"services/{filename_prefix}/service.{image.filename.split('.')[-1]}"
-        image_url = await file_storage_service.upload_file(
-            file_content=file_content,
-            file_name=filename,
-            content_type=image.content_type
+            # Upload new image
+            filename_prefix = f"{uuid.uuid4()}"
+
+            file_content = await image.read()
+            filename = f"services/{filename_prefix}/service.{image.filename.split('.')[-1]}"
+            image_url = await file_storage_service.upload_file(
+                file_content=file_content,
+                file_name=filename,
+                content_type=image.content_type
+            )
+            service_in.image_url = image_url
+
+        # Update the service (validation happens inside)
+        updated_service = crud_service.update_service(
+            db=db,
+            db_obj=service,
+            obj_in=service_in
         )
-        service_in.image_url = image_url
 
-    # Update the service
-    updated_service = crud_service.update_service(
-        db=db,
-        db_obj=service,
-        obj_in=service_in
-    )
-
-    return DataResponse.success_response(
-        data=updated_service,
-        message="Service updated successfully"
-    )
+        return DataResponse.success_response(
+            data=updated_service,
+            message="Service updated successfully"
+        )
+    except ValueError as e:
+        # Handle validation errors (e.g., category has subcategories)
+        db.rollback()
+        return DataResponse.error_response(
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to update service: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @router.delete("/service/{service_id}", response_model=DataResponse)

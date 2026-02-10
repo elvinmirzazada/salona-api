@@ -99,11 +99,11 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
         cat = cat_data['category']
         subcats = []
 
-        # Find and build subcategories
-        if cat and cat.subcategories:
-            for sub_cat in cat.subcategories:
-                if str(sub_cat.id) in category_dict:
-                    subcats.append(build_category_hierarchy(category_dict[str(sub_cat.id)]))
+        # Find subcategories by looking for categories that have this category as parent
+        for other_cat_id, other_cat_data in category_dict.items():
+            other_cat = other_cat_data['category']
+            if other_cat.parent_category_id and str(other_cat.parent_category_id) == str(cat.id):
+                subcats.append(build_category_hierarchy(other_cat_data))
 
         return CompanyCategoryWithServicesResponse(
             id=cat.id,
@@ -302,14 +302,31 @@ def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServic
 def update_service(db: Session, db_obj: CategoryServices, obj_in: CategoryServiceUpdate) -> CategoryServices:
     """
     Update an existing service
+    Validates category if being changed
     """
-    obj_in.price = int(obj_in.price * 100) if obj_in.price is not None else 0
-    obj_in.discount_price = int(obj_in.discount_price * 100) if obj_in.discount_price is not None else 0
+    # Validate new category if provided
+    if obj_in.category_id and str(obj_in.category_id) != str(db_obj.category_id):
+        is_valid, error_msg = validate_service_category(db, str(obj_in.category_id))
+        if not is_valid:
+            raise ValueError(error_msg)
+
+    # Handle price conversion
+    if obj_in.price is not None:
+        obj_in.price = int(obj_in.price * 100)
+    if obj_in.discount_price is not None:
+        obj_in.discount_price = int(obj_in.discount_price * 100)
+
     update_data = obj_in.model_dump(exclude_unset=True)
 
-    # Handle staff_ids separately
+    # Handle staff_ids and remove_image separately
     staff_ids = update_data.pop('staff_ids', None)
+    remove_image = update_data.pop('remove_image', False)
 
+    # Handle image removal
+    if remove_image:
+        update_data['image_url'] = None
+
+    # Update service fields
     for field, value in update_data.items():
         setattr(db_obj, field, value)
 

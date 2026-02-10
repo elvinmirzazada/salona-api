@@ -361,6 +361,7 @@ class CategoryServiceCreate(CategoryServiceBase):
     staff_ids: List[UUID4] = []  # List of staff member IDs to assign to this service
 
 class CategoryServiceUpdate(BaseModel):
+    category_id: Optional[str] = None  # Allow changing the category
     name: Optional[str] = None
     name_en: Optional[str] = None
     name_ee: Optional[str] = None

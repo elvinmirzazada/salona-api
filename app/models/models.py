@@ -267,12 +267,22 @@ class CompanyCategories(BaseModel):
     @hybrid_property
     def services_count(self):
         """Return the count of services in this category"""
-        return len(self.category_service) if self.category_service else 0
+        if self.category_service is None:
+            return 0
+        try:
+            return len(self.category_service)
+        except (TypeError, AttributeError):
+            return 0
 
     @hybrid_property
     def has_subcategories(self):
         """Check if this category has subcategories"""
-        return len(self.subcategories) > 0 if self.subcategories else False
+        if self.subcategories is None:
+            return False
+        try:
+            return len(self.subcategories) > 0
+        except (TypeError, AttributeError):
+            return False
 
 
 class CategoryServices(BaseModel):
