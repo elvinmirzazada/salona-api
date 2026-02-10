@@ -278,7 +278,7 @@ def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServic
         name_ru=obj_in.name_ru,
         duration=obj_in.duration,
         price=int(obj_in.price * 100),  # Store price in cents
-        discount_price=int(obj_in.discount_price * 100),
+        discount_price=int((obj_in.discount_price or 0) * 100),
         additional_info_ee=obj_in.additional_info_ee,
         additional_info_en=obj_in.additional_info_en,
         additional_info_ru=obj_in.additional_info_ru,
