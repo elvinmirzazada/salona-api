@@ -507,7 +507,7 @@ async def update_company(
         updated_company = crud_company.update(
             db=db,
             db_obj=company,
-            obj_in=company_in.model_dump(exclude_unset=True)
+            obj_in=company_in
         )
         return DataResponse.success_response(
             data=updated_company,
