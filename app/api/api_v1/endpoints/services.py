@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.schemas import (CompanyCategoryWithServicesResponse, CompanyUser,
                                CompanyCategoryCreate, CompanyCategoryUpdate, CompanyCategory,
-                               CategoryServiceCreate, CategoryServiceUpdate, CategoryServiceResponse)
+                               CategoryServiceCreate, CategoryServiceUpdate, CategoryServiceResponse,
+                               CompanyCategoryHierarchical)
 from app.schemas.responses import DataResponse
 import uuid
 import json
@@ -77,9 +78,32 @@ def create_category(
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
-    Create a new service category.
+    Create a new service category or subcategory.
+    If parent_category_id is provided, validates that the parent category doesn't have services.
     """
     try:
+        # Validate parent category if this is a subcategory
+        if category_in.parent_category_id:
+            parent_category = crud_service.get_category(db=db, category_id=str(category_in.parent_category_id))
+            if not parent_category:
+                return DataResponse.error_response(
+                    message="Parent category not found",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+
+            if str(parent_category.company_id) != company_id:
+                return DataResponse.error_response(
+                    message="Parent category does not belong to this company",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
+
+            # Check if parent has services
+            if parent_category.services_count > 0:
+                return DataResponse.error_response(
+                    message="Cannot add subcategories to a category that already has services. Please remove the services first.",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
         # Create the category
         category_in.company_id = company_id
         category = crud_service.create_category(db=db, obj_in=category_in)
@@ -91,7 +115,7 @@ def create_category(
     except Exception as e:
         db.rollback()
         return DataResponse.error_response(
-            message=f"Failed to create categroy: {str(e)}",
+            message=f"Failed to create category: {str(e)}",
             data=None,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -122,9 +146,25 @@ def get_company_categories(
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
-    Get all categories for a company.
+    Get all categories for a company (flat list).
     """
     categories = crud_service.get_company_categories(db=db, company_id=company_id)
+
+    return DataResponse.success_response(
+        data=categories,
+        message="Categories fetched successfully"
+    )
+
+
+@router.get("/companies/categories/hierarchical", response_model=DataResponse[List[CompanyCategoryHierarchical]])
+def get_company_categories_hierarchical(
+        db: Session = Depends(get_db),
+        company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Get all categories for a company in hierarchical structure (categories with nested subcategories).
+    """
+    categories = crud_service.get_company_categories_hierarchical(db=db, company_id=company_id)
 
     return DataResponse.success_response(
         data=categories,
@@ -195,6 +235,7 @@ async def create_service(
 ) -> DataResponse:
     """
     Create a new service.
+    Services can only be added to categories that don't have subcategories.
     """
     try:
 
@@ -224,13 +265,20 @@ async def create_service(
             )
             service_in.image_url = image_url
 
-        # Create the service
+        # Create the service (validation happens inside)
         service = crud_service.create_service(db=db, obj_in=service_in)
 
         return DataResponse.success_response(
             data=service,
             message="Service created successfully"
         )
+    except ValueError as e:
+        # Handle validation errors (e.g., category has subcategories)
+        db.rollback()
+        return DataResponse.error_response(
+            message=str(e),
+            data=None,
+            status_code=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         db.rollback()
         return DataResponse.error_response(

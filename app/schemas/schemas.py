@@ -389,6 +389,7 @@ class CompanyCategoryBase(BaseModel):
     description_en: Optional[str] = None
     description_ee: Optional[str] = None
     description_ru: Optional[str] = None
+    parent_category_id: Optional[UUID4] = None
 
 class CompanyCategoryCreate(CompanyCategoryBase):
     company_id: Optional[str] = None
@@ -403,6 +404,7 @@ class CompanyCategoryUpdate(BaseModel):
     description_ee: Optional[str] = None
     description_ru: Optional[str] = None
     company_id: Optional[str] = None
+    parent_category_id: Optional[UUID4] = None
 
 class CompanyCategory(CompanyCategoryBase, TimestampedModel):
     model_config = ConfigDict(from_attributes=True)
@@ -410,6 +412,18 @@ class CompanyCategory(CompanyCategoryBase, TimestampedModel):
     id: UUID4
     company_id: UUID4
     services_count: int = 0  # Optional field to store the count of services in this category
+    has_subcategories: bool = False
+
+
+# Hierarchical category response with subcategories
+class CompanyCategoryHierarchical(CompanyCategoryBase, TimestampedModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID4
+    company_id: UUID4
+    services_count: int = 0
+    has_subcategories: bool = False
+    subcategories: List['CompanyCategoryHierarchical'] = []
 
 
 # CompanyCategoryWithServicesResponse already exists
@@ -418,6 +432,9 @@ class CompanyCategoryWithServicesResponse(BaseModel):
     name: str
     description: Optional[str] = None
     services: List['CategoryServiceResponse'] = []
+    parent_category_id: Optional[UUID4] = None
+    subcategories: List['CompanyCategoryWithServicesResponse'] = []
+
 
 # Time Off schemas
 class TimeOffBase(BaseModel):

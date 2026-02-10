@@ -47,45 +47,78 @@ def get_service(db: Session, service_id: str, company_id: str) -> Optional[Categ
 
 def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWithServicesResponse]:
     """
-    Get all services for a company grouped by category with assigned staff
-    Returns a dictionary where keys are categories and values are lists of services
+    Get all services for a company grouped by category with assigned staff in hierarchical structure
+    Returns categories with their services and subcategories
     """
-    # Get all services for the company
-    services = (db.query(CompanyCategories.name, CompanyCategories.id, CategoryServices, CompanyCategories.description)
-                .join(CompanyCategories, CategoryServices.category_id==CompanyCategories.id).filter(
-                CompanyCategories.company_id == company_id
-    ).all())
-    comp_categories = defaultdict(list)
-    for service in services:
-        staff_members = get_service_staff(db, service[2].id)
-        comp_categories[(service[0], service[1], service[3])].append(CategoryServiceResponse(
-            id=service[2].id,
-            name=service[2].name,
-            name_en=service[2].name_en,
-            name_ee=service[2].name_ee,
-            name_ru=service[2].name_ru,
-            duration=service[2].duration,
-            discount_price=service[2].discount_price,
-            price=service[2].price,
-            additional_info=service[2].additional_info,
-            additional_info_en=service[2].additional_info_en,
-            additional_info_ee=service[2].additional_info_ee,
-            additional_info_ru=service[2].additional_info_ru,
-            status=service[2].status,
-            buffer_before=service[2].buffer_before,
-            buffer_after=service[2].buffer_after,
-            service_staff=staff_members,
-            image_url=service[2].image_url
-        ))
+    # Get all categories and services for the company
+    all_categories = db.query(CompanyCategories).filter(
+        CompanyCategories.company_id == company_id
+    ).all()
 
+    # Build a dictionary for quick lookup
+    category_dict = {}
+    for cat in all_categories:
+        category_dict[str(cat.id)] = {
+            'category': cat,
+            'services': [],
+            'subcategories': []
+        }
+
+    # Get all services for the company
+    services = (db.query(CategoryServices, CompanyCategories)
+                .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
+                .filter(CompanyCategories.company_id == company_id)
+                .all())
+
+    # Map services to their categories
+    for service, category in services:
+        staff_members = get_service_staff(db, service.id)
+        service_response = CategoryServiceResponse(
+            id=service.id,
+            name=service.name,
+            name_en=service.name_en,
+            name_ee=service.name_ee,
+            name_ru=service.name_ru,
+            duration=service.duration,
+            discount_price=service.discount_price,
+            price=service.price,
+            additional_info=service.additional_info,
+            additional_info_en=service.additional_info_en,
+            additional_info_ee=service.additional_info_ee,
+            additional_info_ru=service.additional_info_ru,
+            status=service.status,
+            buffer_before=service.buffer_before,
+            buffer_after=service.buffer_after,
+            service_staff=staff_members,
+            image_url=service.image_url
+        )
+        category_dict[str(category.id)]['services'].append(service_response)
+
+    # Build hierarchical structure
+    def build_category_hierarchy(cat_data) -> CompanyCategoryWithServicesResponse:
+        cat = cat_data['category']
+        subcats = []
+
+        # Find and build subcategories
+        if cat and cat.subcategories:
+            for sub_cat in cat.subcategories:
+                if str(sub_cat.id) in category_dict:
+                    subcats.append(build_category_hierarchy(category_dict[str(sub_cat.id)]))
+
+        return CompanyCategoryWithServicesResponse(
+            id=cat.id,
+            name=cat.name,
+            description=cat.description,
+            parent_category_id=cat.parent_category_id,
+            services=cat_data['services'],
+            subcategories=subcats
+        )
+
+    # Get root categories (no parent) and build hierarchy
     result = []
-    for category, services in comp_categories.items():
-        result.append(CompanyCategoryWithServicesResponse(
-            name=category[0],
-            id = category[1],
-            description=category[2],
-            services=services
-        ))
+    for cat_id, cat_data in category_dict.items():
+        if cat_data['category'].parent_category_id is None:
+            result.append(build_category_hierarchy(cat_data))
 
     return result
 
@@ -109,7 +142,8 @@ def create_category(db: Session, obj_in: CompanyCategoryCreate) -> CompanyCatego
         description_en=obj_in.description_en,
         description_ee=obj_in.description_ee,
         description_ru=obj_in.description_ru,
-        company_id=obj_in.company_id
+        company_id=obj_in.company_id,
+        parent_category_id=obj_in.parent_category_id
     )
 
     db.add(db_obj)
@@ -152,10 +186,90 @@ def get_company_categories(db: Session, company_id: str) -> List[CompanyCategori
     return db.query(CompanyCategories).filter(CompanyCategories.company_id == company_id).all()
 
 
+def get_company_categories_hierarchical(db: Session, company_id: str):
+    """
+    Get all categories for a company in hierarchical structure (parent categories with their subcategories)
+    Returns only root categories (those without parent_category_id) with nested subcategories
+    """
+    from app.schemas.schemas import CompanyCategoryHierarchical
+
+    # Get all categories for the company
+    all_categories = db.query(CompanyCategories).filter(
+        CompanyCategories.company_id == company_id
+    ).all()
+
+    # Build a dictionary for quick lookup
+    category_dict = {str(cat.id): cat for cat in all_categories}
+
+    # Build hierarchical structure
+    def build_hierarchy(category: CompanyCategories) -> CompanyCategoryHierarchical:
+        subcats = [build_hierarchy(category_dict[str(sub.id)])
+                   for sub in category.subcategories if str(sub.id) in category_dict]
+
+        return CompanyCategoryHierarchical(
+            id=category.id,
+            company_id=category.company_id,
+            parent_category_id=category.parent_category_id,
+            name=category.name,
+            name_en=category.name_en,
+            name_ee=category.name_ee,
+            name_ru=category.name_ru,
+            description=category.description,
+            description_en=category.description_en,
+            description_ee=category.description_ee,
+            description_ru=category.description_ru,
+            created_at=category.created_at,
+            updated_at=category.updated_at,
+            services_count=category.services_count,
+            has_subcategories=category.has_subcategories,
+            subcategories=subcats
+        )
+
+    # Get root categories (no parent)
+    root_categories = [cat for cat in all_categories if cat.parent_category_id is None]
+
+    # Build hierarchy for each root
+    return [build_hierarchy(cat) for cat in root_categories]
+
+
+def category_has_subcategories(db: Session, category_id: str) -> bool:
+    """
+    Check if a category has any subcategories
+    """
+    count = db.query(CompanyCategories).filter(
+        CompanyCategories.parent_category_id == category_id
+    ).count()
+    return count > 0
+
+
+def validate_service_category(db: Session, category_id: str) -> tuple[bool, str]:
+    """
+    Validate if services can be added to this category.
+    Returns (is_valid, error_message)
+
+    Rules:
+    - Services can only be added to categories that don't have subcategories
+    """
+    category = get_category(db, category_id)
+    if not category:
+        return False, "Category not found"
+
+    if category_has_subcategories(db, category_id):
+        return False, "Cannot add services to a category that has subcategories. Please add services to the subcategories instead."
+
+    return True, ""
+
+
 def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServices:
     """
     Create a new service within a category
+    Validates that the category doesn't have subcategories
     """
+    # Validate category before creating service
+    is_valid, error_msg = validate_service_category(db, str(obj_in.category_id))
+    if not is_valid:
+        raise ValueError(error_msg)
+
     db_obj = CategoryServices(
         category_id=obj_in.category_id,
         name=obj_in.name,

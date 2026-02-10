@@ -246,6 +246,7 @@ class CompanyCategories(BaseModel):
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
+    parent_category_id = Column(UUID(as_uuid=True), ForeignKey("company_categories.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     name_en = Column(String(100), nullable=True)
     name_ee = Column(String(100), nullable=True)
@@ -258,11 +259,20 @@ class CompanyCategories(BaseModel):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     category_service = relationship("CategoryServices", back_populates="company_category")
+    subcategories = relationship("CompanyCategories",
+                                  backref="parent",
+                                  remote_side=[id],
+                                  cascade="all, delete")
 
     @hybrid_property
     def services_count(self):
         """Return the count of services in this category"""
         return len(self.category_service) if self.category_service else 0
+
+    @hybrid_property
+    def has_subcategories(self):
+        """Check if this category has subcategories"""
+        return len(self.subcategories) > 0 if self.subcategories else False
 
 
 class CategoryServices(BaseModel):
