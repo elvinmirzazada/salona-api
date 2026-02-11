@@ -5,6 +5,7 @@ from datetime import datetime, timezone, date, timedelta
 from typing import List
 from pydantic.v1 import UUID4
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -26,21 +27,21 @@ router = APIRouter()
 
 
 @router.get("/companies/{company_slug}/services", response_model=DataResponse[List[CompanyCategoryWithServicesResponse]])
-def get_company_services(
+async def get_company_services(
     company_slug: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> DataResponse:
     """
     Get service by company ID with details.
     """
-    company = crud_company.get_by_slug(db=db, slug=company_slug)
+    company = await crud_company.get_by_slug(db=db, slug=company_slug)
     if not company:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Company not found"
         )
     company_id = str(company.id)
-    services = crud_service.get_company_services(db=db, company_id=company_id)
+    services = await crud_service.get_company_services(db=db, company_id=company_id)
     if not services:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

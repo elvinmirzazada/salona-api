@@ -262,14 +262,14 @@ class BookingService(TimestampedModel):
 
     id: UUID4
     booking_id: UUID4
-    category_service_id: UUID4
-    user_id: UUID4
+    category_service_id: Optional[UUID4] = None  # Make optional to handle None values
+    user_id: Optional[UUID4] = None  # Make optional to handle None values
     notes: Optional[str] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    start_at: Optional[datetime] = None  # Changed from start_date to match DB column
+    end_at: Optional[datetime] = None    # Changed from end_date to match DB column
 
     category_service: Optional[CategoryServiceResponse] = None
-    assigned_staff: Optional[User] = None  # Changed from assigned_staff to match the model relationship
+    user: Optional[User] = None  # Changed from assigned_staff to match the model relationship
 
 
 class Booking(BookingBase, TimestampedModel):

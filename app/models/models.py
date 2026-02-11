@@ -309,7 +309,7 @@ class CategoryServices(BaseModel):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     company_category = relationship("CompanyCategories", back_populates="category_service")
-    booking_category_services = relationship("BookingServices", back_populates="category_service")
+    # booking_category_services = relationship("BookingServices", back_populates="category_service")
     service_staff = relationship("ServiceStaff", back_populates="service")
 
 
@@ -344,7 +344,7 @@ class BookingServices(BaseModel):
     end_at = Column(DateTime, nullable=True)
 
     booking = relationship("Bookings", back_populates="booking_services")
-    category_service = relationship("CategoryServices", back_populates="booking_category_services")
+    # category_service = relationship("CategoryServices", back_populates="booking_category_services")
     assigned_staff = relationship("Users", back_populates="booked_services")
 
 

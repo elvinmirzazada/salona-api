@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic.v1 import UUID4
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.core.redis_client import publish_event
 from app.schemas import CompanyNotificationCreate
@@ -34,7 +34,7 @@ security = HTTPBearer(auto_error=False)
 @router.get("", response_model=DataResponse[List[Booking]], status_code=status.HTTP_200_OK)
 async def get_all_bookings(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
         start_date: Optional[date] = Query(None, description="Start date in YYYY-MM-DD format"),
         end_date: Optional[date] = Query(None, description="End date in YYYY-MM-DD format")
@@ -48,11 +48,15 @@ async def get_all_bookings(
             message="Company ID is required"
         )
     if not start_date:
-        start_date = (datetime.now() - timedelta(days=datetime.now().weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Get timezone-aware datetime for start of week
+        now = datetime.now(timezone.utc)
+        start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0).date()
     if not end_date:
-        end_date = (datetime.now() - timedelta(days=datetime.now().weekday()) + timedelta(days=7)).replace(hour=23, minute=59, second=59, microsecond=999999)
+        # Get timezone-aware datetime for end of week
+        now = datetime.now(timezone.utc)
+        end_date = (now - timedelta(days=now.weekday()) + timedelta(days=7)).replace(hour=23, minute=59, second=59, microsecond=999999).date()
 
-    bookings: List[Booking] = crud_booking.get_all_bookings_in_range_by_company(db=db,
+    bookings: List[Booking] = await crud_booking.get_all_bookings_in_range_by_company(db=db,
                                                                  company_id=company_id,
                                                                  start_date=start_date,
                                                                  end_date=end_date)
@@ -74,7 +78,7 @@ async def get_all_bookings(
 @router.post("/users/create_booking", response_model=DataResponse[Booking], status_code=status.HTTP_201_CREATED)
 async def create_booking_by_user(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         booking_in: BookingCreate,
         response: Response,
         company_id: str = Depends(get_current_company_id),
@@ -100,7 +104,7 @@ async def create_booking_by_user(
         )
     if booking_in.customer_info.id:
         # If customer_info contains an ID, try to fetch that customer
-        existing_customer = crud_customer.get(db, id=booking_in.customer_info.id)
+        existing_customer = await crud_customer.get(db, id=booking_in.customer_info.id)
         if existing_customer:
             customer = existing_customer
         else:
@@ -123,14 +127,14 @@ async def create_booking_by_user(
         )
 
         # Check if customer with this email already exists
-        existing_customer = crud_customer.get_by_email(db, email=str(customer_data.email))
+        existing_customer = await crud_customer.get_by_email(db, email=str(customer_data.email))
         if existing_customer:
             customer = existing_customer
         else:
-            customer = crud_customer.create(db, obj_in=customer_data)
+            customer = await crud_customer.create(db, obj_in=customer_data)
 
     # Verify that the company exists
-    selected_company = crud_company.get(db=db, id=booking_in.company_id)
+    selected_company = await crud_company.get(db=db, id=booking_in.company_id)
     if not selected_company:
         response.status_code = status.HTTP_404_NOT_FOUND
         return DataResponse.error_response(
@@ -151,7 +155,7 @@ async def create_booking_by_user(
     
     for selected_company_service in booking_in.services:
         # Verify that the service exists and belongs to the company
-        company_service = crud_service.get_service(db=db, service_id=selected_company_service.category_service_id,
+        company_service = await crud_service.get_service(db=db, service_id=selected_company_service.category_service_id,
                                                    company_id=selected_company.id)
         if not company_service:
             response.status_code = status.HTTP_404_NOT_FOUND
@@ -161,7 +165,7 @@ async def create_booking_by_user(
             )
 
         # Verify that the user(worker) exists and belongs to the company
-        selected_user = crud_user.get(db=db, id=selected_company_service.user_id)
+        selected_user = await crud_user.get(db=db, id=selected_company_service.user_id)
         if not selected_user:
             response.status_code = status.HTTP_404_NOT_FOUND
             return DataResponse.error_response(
@@ -174,7 +178,7 @@ async def create_booking_by_user(
         service_end_time = current_start_time + timedelta(minutes=company_service.duration)
         
         # Check if the staff member is available for this service time slot
-        is_available, conflict_message = crud_booking.check_staff_availability(
+        is_available, conflict_message = await crud_booking.check_staff_availability(
             db=db,
             user_id=selected_company_service.user_id,
             start_time=current_start_time,
@@ -192,7 +196,7 @@ async def create_booking_by_user(
         current_start_time = service_end_time
 
     try:
-        booking = crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
+        booking = await crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
         response.status_code = status.HTTP_201_CREATED
         # await publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
 
@@ -202,7 +206,7 @@ async def create_booking_by_user(
             'company_id': str(booking.company_id)
         }).encode('utf-8')
         
-        res = notification_service.create_notification(
+        res = await notification_service.create_notification(
             db=db,
             notification_request=CompanyNotificationCreate(
                 company_id=booking_in.company_id,
@@ -218,7 +222,7 @@ async def create_booking_by_user(
             status_code=status.HTTP_201_CREATED
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to create booking: {str(e)}",
@@ -229,148 +233,123 @@ async def create_booking_by_user(
 @router.put("/{booking_id}", response_model=DataResponse[Booking], status_code=status.HTTP_200_OK)
 async def update_booking(
         *,
+        db: AsyncSession = Depends(get_db),
         booking_id: str,
-        db: Session = Depends(get_db),
-        booking_update: BookingUpdate,
+        booking_in: BookingUpdate,
         response: Response,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
-    Update a booking by ID.
-    Can update start time, notes, status, and services.
+    Update booking information.
+    Can update status, start_time, end_time, services, or notes.
     """
     try:
-        booking_uuid = UUID4(booking_id)
-    except ValueError:
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        return DataResponse.error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message="Invalid booking ID format"
-        )
-
-    # Get the existing booking
-    existing_booking = crud_booking.get(db=db, id=booking_uuid)
-    if not existing_booking:
-        response.status_code = status.HTTP_404_NOT_FOUND
-        return DataResponse.error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            message="Booking not found"
-        )
-
-    # Verify that the booking belongs to the company
-    if str(existing_booking.company_id) != company_id:
-        response.status_code = status.HTTP_403_FORBIDDEN
-        return DataResponse.error_response(
-            status_code=status.HTTP_403_FORBIDDEN,
-            message="You don't have permission to update this booking"
-        )
-
-    # Validate new start time if provided
-    if booking_update.start_time and booking_update.start_time < datetime.now(timezone.utc):
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        return DataResponse.error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message="Cannot schedule booking in the past"
-        )
-
-    # Validate services if provided
-    if booking_update.services:
-        # Calculate start and end times for each service to check availability
-        current_start_time = booking_update.start_time if booking_update.start_time else existing_booking.start_at
-
-        for service_request in booking_update.services:
-            # Verify that the service exists and belongs to the company
-            company_service = crud_service.get_service(
-                db=db,
-                service_id=service_request.category_service_id,
-                company_id=company_id
-            )
-            if not company_service:
-                response.status_code = status.HTTP_404_NOT_FOUND
-                return DataResponse.error_response(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    message="Service not found or doesn't belong to this company"
-                )
-
-            # Verify that the user(worker) exists and belongs to the company
-            selected_user = crud_user.get(db=db, id=service_request.user_id)
-            if not selected_user:
-                response.status_code = status.HTTP_404_NOT_FOUND
-                return DataResponse.error_response(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    message="User not found"
-                )
-
-            # Calculate end time for this service
-            service_end_time = current_start_time + timedelta(minutes=company_service.duration)
-
-            # Check if the staff member is available for this service time slot
-            is_available, conflict_message = crud_booking.check_staff_availability(
-                db=db,
-                user_id=service_request.user_id,
-                start_time=current_start_time,
-                end_time=service_end_time,
-                exclude_booking_id=booking_uuid  # Exclude current booking from availability check
+        # Get the existing booking
+        booking = await crud_booking.get(db=db, id=booking_id)
+        if not booking:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Booking not found"
             )
 
-            if not is_available:
-                response.status_code = status.HTTP_409_CONFLICT
-                return DataResponse.error_response(
-                    status_code=status.HTTP_409_CONFLICT,
-                    message=conflict_message
-                )
-
-            # Move to the next service start time
-            current_start_time = service_end_time
-
-    # If only start_time is being updated (without services), check availability for existing services
-    elif booking_update.start_time is not None:
-        # Get existing booking services to check availability with new times
-        existing_services = db.query(BookingServices).filter(
-            BookingServices.booking_id == booking_uuid
-        ).order_by(BookingServices.start_at).all()
-
-        current_start_time = booking_update.start_time
-        for booking_service in existing_services:
-            # Calculate duration of this service
-            service_duration = booking_service.end_at - booking_service.start_at
-            service_end_time = current_start_time + service_duration
-
-            # Check if the staff member is available for the new time slot
-            is_available, conflict_message = crud_booking.check_staff_availability(
-                db=db,
-                user_id=booking_service.user_id,
-                start_time=current_start_time,
-                end_time=service_end_time,
-                exclude_booking_id=booking_uuid  # Exclude current booking from availability check
+        # Check if booking belongs to the company
+        if str(booking.company_id) != company_id:
+            response.status_code = status.HTTP_403_FORBIDDEN
+            return DataResponse.error_response(
+                status_code=status.HTTP_403_FORBIDDEN,
+                message="You don't have permission to update this booking"
             )
 
-            if not is_available:
-                response.status_code = status.HTTP_409_CONFLICT
-                return DataResponse.error_response(
-                    status_code=status.HTTP_409_CONFLICT,
-                    message=conflict_message
+        # If updating time, validate it's not in the past
+        if booking_in.start_time and booking_in.start_time < datetime.now(timezone.utc):
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return DataResponse.error_response(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="Cannot update booking time to the past"
+            )
+
+        # If services are being updated, validate them
+        if booking_in.services:
+            current_start_time = booking_in.start_time or booking.start_at
+
+            for selected_company_service in booking_in.services:
+                # Verify service exists and belongs to company
+                company_service = await crud_service.get_service(
+                    db=db,
+                    service_id=selected_company_service.category_service_id,
+                    company_id=company_id
+                )
+                if not company_service:
+                    response.status_code = status.HTTP_404_NOT_FOUND
+                    return DataResponse.error_response(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        message="Service not found or doesn't belong to this company"
+                    )
+
+                # Verify user exists and belongs to company
+                selected_user = await crud_user.get(db=db, id=selected_company_service.user_id)
+                if not selected_user:
+                    response.status_code = status.HTTP_404_NOT_FOUND
+                    return DataResponse.error_response(
+                        data=None,
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        message="User not found or doesn't belong to this company"
+                    )
+
+                # Calculate end time for this service
+                service_end_time = current_start_time + timedelta(minutes=company_service.duration)
+
+                # Check staff availability (excluding current booking)
+                is_available, conflict_message = await crud_booking.check_staff_availability(
+                    db=db,
+                    user_id=selected_company_service.user_id,
+                    start_time=current_start_time,
+                    end_time=service_end_time,
+                    exclude_booking_id=booking_id
                 )
 
+                if not is_available:
+                    response.status_code = status.HTTP_409_CONFLICT
+                    return DataResponse.error_response(
+                        status_code=status.HTTP_409_CONFLICT,
+                        message=conflict_message
+                    )
 
-    try:
-        updated_booking = crud_booking.update(
-            db=db,
-            db_obj=existing_booking,
-            obj_in=booking_update
-        )
-        response.status_code = status.HTTP_200_OK
+                current_start_time = service_end_time
+
+        # Update the booking
+        updated_booking = await crud_booking.update(db=db, db_obj=booking, obj_in=booking_in)
+
+        # Create notification for status change
+        if booking_in.status and booking_in.status != booking.status:
+            booking_data = json.dumps({
+                'booking_id': str(booking.id),
+                'company_id': str(booking.company_id),
+                'old_status': str(booking.status),
+                'new_status': str(booking_in.status)
+            }).encode('utf-8')
+
+            await notification_service.create_notification(
+                db=db,
+                notification_request=CompanyNotificationCreate(
+                    company_id=company_id,
+                    type=NotificationType.BOOKING_UPDATED,
+                    message=f"Booking status changed from {booking.status} to {booking_in.status}",
+                    data=booking_data
+                )
+            )
+
         return DataResponse.success_response(
             message="Booking updated successfully",
             data=updated_booking,
             status_code=status.HTTP_200_OK
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
-            message=f"Failed to complete booking: {str(e)}",
-            data=None,
+            message=f"Failed to update booking: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -379,7 +358,7 @@ async def update_booking(
 async def mark_booking_no_show(
         *,
         booking_id: str,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         response: Response,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
@@ -396,7 +375,7 @@ async def mark_booking_no_show(
         )
 
     # Get the existing booking
-    existing_booking = crud_booking.get(db=db, id=booking_uuid)
+    existing_booking = await crud_booking.get(db=db, id=booking_uuid)
     if not existing_booking:
         response.status_code = status.HTTP_404_NOT_FOUND
         return DataResponse.error_response(
@@ -438,7 +417,7 @@ async def mark_booking_no_show(
 
     try:
         # Use the CRUD no_show function to mark the booking as no-show
-        no_show_booking = crud_booking.no_show(db=db, booking_id=booking_uuid)
+        no_show_booking = await crud_booking.no_show(db=db, booking_id=booking_uuid)
         if not no_show_booking:
             response.status_code = status.HTTP_404_NOT_FOUND
             return DataResponse.error_response(
@@ -446,7 +425,7 @@ async def mark_booking_no_show(
                 message="Booking not found"
             )
 
-        db.commit()
+        await db.commit()
         response.status_code = status.HTTP_200_OK
         return DataResponse.success_response(
             message="Booking marked as no-show successfully",
@@ -454,7 +433,7 @@ async def mark_booking_no_show(
             status_code=status.HTTP_200_OK
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to mark booking as no-show: {str(e)}",
@@ -467,7 +446,7 @@ async def mark_booking_no_show(
 async def delete_booking(
         *,
         booking_id: str,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         response: Response,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
@@ -484,7 +463,7 @@ async def delete_booking(
         )
 
     # Get the existing booking
-    existing_booking = crud_booking.get(db=db, id=booking_uuid)
+    existing_booking = await crud_booking.get(db=db, id=booking_uuid)
     if not existing_booking:
         response.status_code = status.HTTP_404_NOT_FOUND
         return DataResponse.error_response(
@@ -502,7 +481,7 @@ async def delete_booking(
 
     try:
         # Use the CRUD cancel function to mark the booking as cancelled
-        cancelled_booking = crud_booking.cancel(db=db, booking_id=booking_uuid)
+        cancelled_booking = await crud_booking.cancel(db=db, booking_id=booking_uuid)
         if not cancelled_booking:
             response.status_code = status.HTTP_404_NOT_FOUND
             return DataResponse.error_response(
@@ -510,9 +489,9 @@ async def delete_booking(
                 message="Booking not found"
             )
 
-        db.commit()
+        await db.commit()
 
-        company = crud_company.get(db, id=cancelled_booking.company_id)
+        company = await crud_company.get(db, id=cancelled_booking.company_id)
 
         email_service.send_booking_cancellation_to_customer_email(
             to_email=cancelled_booking.customer.email,
@@ -530,7 +509,7 @@ async def delete_booking(
             status_code=status.HTTP_200_OK
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to cancel booking: {str(e)}",
@@ -543,7 +522,7 @@ async def delete_booking(
 async def confirm_booking(
         *,
         booking_id: str,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         response: Response,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
@@ -560,7 +539,7 @@ async def confirm_booking(
         )
 
     # Get the existing booking
-    existing_booking = crud_booking.get(db=db, id=booking_uuid)
+    existing_booking = await crud_booking.get(db=db, id=booking_uuid)
     if not existing_booking:
         response.status_code = status.HTTP_404_NOT_FOUND
         return DataResponse.error_response(
@@ -594,7 +573,7 @@ async def confirm_booking(
 
     try:
         # Use the CRUD confirm function to mark the booking as confirmed
-        confirmed_booking = crud_booking.confirm(db=db, booking_id=booking_uuid)
+        confirmed_booking = await crud_booking.confirm(db=db, booking_id=booking_uuid)
         if not confirmed_booking:
             response.status_code = status.HTTP_404_NOT_FOUND
             return DataResponse.error_response(
@@ -602,14 +581,17 @@ async def confirm_booking(
                 message="Booking not found"
             )
 
-        db.commit()
-        company = crud_company.get(db, id=confirmed_booking.company_id)
+        await db.commit()
+        company = await crud_company.get(db, id=confirmed_booking.company_id)
 
         # Get company address for calendar location
         from app.models.models import CompanyAddresses
-        company_address = db.query(CompanyAddresses).filter(
+        from sqlalchemy import select
+        stmt = select(CompanyAddresses).filter(
             CompanyAddresses.company_id == confirmed_booking.company_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        company_address = result.scalar_one_or_none()
 
         # Format location string
         location = None
@@ -635,7 +617,7 @@ async def confirm_booking(
             status_code=status.HTTP_200_OK
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to confirm booking: {str(e)}",
@@ -648,7 +630,7 @@ async def confirm_booking(
 async def complete_booking(
         *,
         booking_id: str,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         response: Response,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
@@ -665,7 +647,7 @@ async def complete_booking(
         )
 
     # Get the existing booking
-    existing_booking = crud_booking.get(db=db, id=booking_uuid)
+    existing_booking = await crud_booking.get(db=db, id=booking_uuid)
     if not existing_booking:
         response.status_code = status.HTTP_404_NOT_FOUND
         return DataResponse.error_response(
@@ -699,7 +681,7 @@ async def complete_booking(
 
     try:
         # Use the CRUD complete function to mark the booking as completed
-        completed_booking = crud_booking.complete(db=db, booking_id=booking_uuid)
+        completed_booking = await crud_booking.complete(db=db, booking_id=booking_uuid)
         if not completed_booking:
             response.status_code = status.HTTP_404_NOT_FOUND
             return DataResponse.error_response(
@@ -707,8 +689,8 @@ async def complete_booking(
                 message="Booking not found"
             )
 
-        db.commit()
-        company = crud_company.get(db, id=completed_booking.company_id)
+        await db.commit()
+        company = await crud_company.get(db, id=completed_booking.company_id)
         email_service.send_booking_completed_to_customer_email(
             to_email=completed_booking.customer.email,
             customer_name=completed_booking.customer.first_name,
@@ -724,7 +706,7 @@ async def complete_booking(
             status_code=status.HTTP_200_OK
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to complete booking: {str(e)}",

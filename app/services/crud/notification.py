@@ -1,6 +1,6 @@
 from typing import List, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, func, select, update
 from pydantic import UUID4
 
 from app.models import NotificationStatus
@@ -9,22 +9,24 @@ from app.schemas import NotificationCreate, NotificationUpdate, Notification
 from app.schemas.responses import PaginationInfo
 
 
-def create_company_notification(db: Session, notification: NotificationCreate) -> Notification:
+async def create_company_notification(db: AsyncSession, notification: NotificationCreate) -> Notification:
     """Create a new notification"""
     db_notification = CompanyNotifications(**notification.model_dump())
     db.add(db_notification)
-    db.commit()
-    db.refresh(db_notification)
+    await db.commit()
+    await db.refresh(db_notification)
     return db_notification
 
 
-def get_notification(db: Session, notification_id: UUID4) -> Optional[CompanyNotifications]:
+async def get_notification(db: AsyncSession, notification_id: UUID4) -> Optional[CompanyNotifications]:
     """Get a notification by ID"""
-    return db.query(CompanyNotifications).filter(CompanyNotifications.id == notification_id).first()
+    stmt = select(CompanyNotifications).filter(CompanyNotifications.id == notification_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def get_user_notifications(
-    db: Session, 
+async def get_user_notifications(
+    db: AsyncSession,
     company_id: UUID4,
     page: int = 1, 
     per_page: int = 20,
@@ -33,22 +35,33 @@ def get_user_notifications(
     """Get paginated notifications for a user"""
     if status_filter is None:
         status_filter = ['unread', 'read']
-    query = db.query(CompanyNotifications).filter(CompanyNotifications.company_id == company_id)
-    
+
+    stmt = select(CompanyNotifications).filter(CompanyNotifications.company_id == company_id)
+
     # Apply status filter if provided
     if status_filter:
-        query = query.filter(CompanyNotifications.status.in_(status_filter))
-    
+        stmt = stmt.filter(CompanyNotifications.status.in_(status_filter))
+
     # Order by created_at descending (newest first)
-    query = query.order_by(CompanyNotifications.created_at.desc())
-    
+    stmt = stmt.order_by(CompanyNotifications.created_at.desc())
+
     # Calculate total count
-    total = query.count()
-    
+    count_stmt = select(func.count()).select_from(CompanyNotifications).filter(
+        CompanyNotifications.company_id == company_id
+    )
+    if status_filter:
+        count_stmt = count_stmt.filter(CompanyNotifications.status.in_(status_filter))
+
+    count_result = await db.execute(count_stmt)
+    total = count_result.scalar()
+
     # Calculate pagination
     offset = (page - 1) * per_page
-    notifications = query.offset(offset).limit(per_page).all()
-    
+    stmt = stmt.offset(offset).limit(per_page)
+
+    result = await db.execute(stmt)
+    notifications = result.scalars().all()
+
     total_pages = (total + per_page - 1) // per_page
     
     pagination_info = PaginationInfo(
@@ -61,75 +74,94 @@ def get_user_notifications(
     return notifications, pagination_info
 
 
-def update_notification(
-    db: Session, 
-    notification_id: UUID4, 
+async def update_notification(
+    db: AsyncSession,
+    notification_id: UUID4,
     notification_update: NotificationUpdate
 ) -> Optional[CompanyNotifications]:
     """Update a notification"""
-    db_notification = db.query(CompanyNotifications).filter(CompanyNotifications.id == notification_id).first()
+    stmt = select(CompanyNotifications).filter(CompanyNotifications.id == notification_id)
+    result = await db.execute(stmt)
+    db_notification = result.scalar_one_or_none()
+
     if db_notification:
         update_data = notification_update.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(db_notification, key, value)
-        db.commit()
-        db.refresh(db_notification)
+        await db.commit()
+        await db.refresh(db_notification)
     return db_notification
 
 
-def delete_notification(db: Session, notification_id: UUID4) -> bool:
+async def delete_notification(db: AsyncSession, notification_id: UUID4) -> bool:
     """Delete a notification"""
-    db.query(CompanyNotifications).filter(CompanyNotifications.id == notification_id).update(
-        {'status': NotificationStatus.ARCHIVED}, synchronize_session=False
+    stmt = (
+        update(CompanyNotifications)
+        .where(CompanyNotifications.id == notification_id)
+        .values(status=NotificationStatus.ARCHIVED)
     )
-    db.commit()
+    await db.execute(stmt)
+    await db.commit()
     return True
 
 
-def mark_notifications_as_read(db: Session, company_id: UUID4, notification_ids: List[str]) -> int:
+async def mark_notifications_as_read(db: AsyncSession, company_id: UUID4, notification_ids: List[str]) -> int:
     """Mark multiple notifications as read"""
-    
-    count = db.query(CompanyNotifications).filter(
-        and_(
-            CompanyNotifications.company_id == company_id,
-            CompanyNotifications.id.in_(notification_ids)
+    stmt = (
+        update(CompanyNotifications)
+        .where(
+            and_(
+                CompanyNotifications.company_id == company_id,
+                CompanyNotifications.id.in_(notification_ids)
+            )
         )
-    ).update({"status": NotificationStatus.READ}, synchronize_session=False)
-    
-    db.commit()
-    return count
+        .values(status=NotificationStatus.READ)
+    )
+
+    result = await db.execute(stmt)
+    await db.commit()
+    return result.rowcount
 
 
-def mark_all_notifications_as_read(db: Session, company_id: UUID4) -> int:
+async def mark_all_notifications_as_read(db: AsyncSession, company_id: UUID4) -> int:
     """Mark all notifications as read for a user"""
     from app.models.enums import NotificationStatus
     
-    count = db.query(CompanyNotifications).filter(
-        and_(
-            CompanyNotifications.company_id == company_id,
-            CompanyNotifications.status == NotificationStatus.UNREAD
+    stmt = (
+        update(CompanyNotifications)
+        .where(
+            and_(
+                CompanyNotifications.company_id == company_id,
+                CompanyNotifications.status == NotificationStatus.UNREAD
+            )
         )
-    ).update({"status": NotificationStatus.READ}, synchronize_session=False)
-    
-    db.commit()
-    return count
+        .values(status=NotificationStatus.READ)
+    )
+
+    result = await db.execute(stmt)
+    await db.commit()
+    return result.rowcount
 
 
-def get_unread_count(db: Session, company_id: UUID4) -> int:
+async def get_unread_count(db: AsyncSession, company_id: UUID4) -> int:
     """Get count of unread notifications for a user"""
     from app.models.enums import NotificationStatus
     
-    return db.query(func.count(CompanyNotifications.id)).filter(
+    stmt = select(func.count(CompanyNotifications.id)).filter(
         and_(
             CompanyNotifications.company_id == company_id,
             CompanyNotifications.status == NotificationStatus.UNREAD
         )
-    ).scalar()
+    )
+    result = await db.execute(stmt)
+    return result.scalar()
 
 
-def get_all_count(db: Session, company_id: UUID4) -> int:
+async def get_all_count(db: AsyncSession, company_id: UUID4) -> int:
     """Get count of all notifications for a company"""
-    return db.query(func.count(CompanyNotifications.id)).filter(
+    stmt = select(func.count(CompanyNotifications.id)).filter(
         CompanyNotifications.company_id == company_id
-    ).scalar()
+    )
+    result = await db.execute(stmt)
+    return result.scalar()
 

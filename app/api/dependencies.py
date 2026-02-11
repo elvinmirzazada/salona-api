@@ -1,5 +1,5 @@
 from fastapi import Depends, HTTPException, status, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.db.session import get_db
 from app.schemas import User
@@ -11,7 +11,7 @@ from app.models.enums import CompanyRoleType
 
 async def get_current_user(
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> Users:
     """Get the current authenticated user from JWT token in HTTP-only cookie."""
 
@@ -32,7 +32,7 @@ async def get_current_user(
         raise credentials_exception
 
     # Get user from database
-    user, company_id = crud_user.get(db, id=user_id)
+    user, company_id = await crud_user.get(db, id=user_id)
     if user is None:
         raise credentials_exception
 
@@ -40,9 +40,9 @@ async def get_current_user(
     return user
 
 
-def get_current_customer(
+async def get_current_customer(
         request: Request,
-        db: Session = Depends(get_db)
+        db: AsyncSession = Depends(get_db)
 ) -> Customers:
     """Get the current authenticated customer from JWT token in HTTP-only cookie."""
     credentials_exception = HTTPException(
@@ -66,7 +66,7 @@ def get_current_customer(
         raise credentials_exception
 
     # Get customer from database
-    customer = crud_customer.get(db, id=customer_id)
+    customer = await crud_customer.get(db, id=customer_id)
 
     if customer is None:
         raise credentials_exception
@@ -118,11 +118,11 @@ async def get_current_active_user(
 async def get_current_company_user(
         current_user: Users = Depends(get_current_user),
         company_id: str = Depends(get_current_company_id),
-        db: Session = Depends(get_db)
+        db: AsyncSession = Depends(get_db)
 ) -> CompanyUsers:
     """Get the current active user (can be extended for status checks)."""
     # Here you can add additional checks like account status, subscription, etc.
-    company_user = crud_company.get_company_user(db, user_id=current_user.id, company_id=company_id)
+    company_user = await crud_company.get_company_user(db, user_id=current_user.id, company_id=company_id)
 
     return company_user
 
@@ -136,15 +136,19 @@ async def get_current_active_customer(
 
 
 async def get_current_user_role(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: Users = Depends(get_current_user),
     company_id: str = Depends(get_current_company_id)
 ) -> CompanyRoleType:
     """Get the current user's role in the company."""
-    company_user = db.query(CompanyUsers).filter(
+    from sqlalchemy import select
+
+    stmt = select(CompanyUsers).filter(
         CompanyUsers.user_id == current_user.id,
         CompanyUsers.company_id == company_id
-    ).first()
+    )
+    result = await db.execute(stmt)
+    company_user = result.scalar_one_or_none()
 
     if not company_user:
         raise HTTPException(

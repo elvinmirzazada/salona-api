@@ -1,6 +1,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Header, status, Response, Request, HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sqlalchemy.testing.suite.test_reflection import metadata
 
@@ -23,7 +24,7 @@ endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
 @router.get("/plans", response_model=DataResponse[List[MembershipPlan]])
 async def list_membership_plans(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     # Only owners and admins can list plans
     _role = Depends(require_admin_or_owner),
     skip: int = 0,
@@ -33,7 +34,7 @@ async def list_membership_plans(
     """
     List membership plans. Requires admin or owner.
     """
-    plans = crud_membership.membership_plan.get_all(db, skip=skip, limit=limit, active_only=active_only)
+    plans = await crud_membership.membership_plan.get_all(db, skip=skip, limit=limit, active_only=active_only)
     return DataResponse.success_response(
         data=plans,
         message="Membership plans fetched successfully"
@@ -43,14 +44,14 @@ async def list_membership_plans(
 @router.get("/active-plan", response_model=DataResponse[CompanyMembership])
 async def get_active_membership_plan(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     _role = Depends(require_staff_or_higher),
     company_id=Depends(get_current_company_id)
 ) -> DataResponse:
     """
     List membership plans. Requires admin or owner.
     """
-    plan = crud_membership.company_membership.get_active_membership(db, company_id=company_id)
+    plan = await crud_membership.company_membership.get_active_membership(db, company_id=company_id)
 
     return DataResponse.success_response(
         data=plan,
@@ -60,11 +61,11 @@ async def get_active_membership_plan(
 
 @router.post("/create-checkout-session/{membership_plan_id}")
 async def create_checkout_session(membership_plan_id: str,
-                                  db: Session = Depends(get_db),
+                                  db: AsyncSession = Depends(get_db),
                                   company_id=Depends(get_current_company_id),
                                   _role=Depends(require_admin_or_owner)):
 
-    membership_plan = crud_membership.membership_plan.get(db, id=membership_plan_id)
+    membership_plan = await crud_membership.membership_plan.get(db, id=membership_plan_id)
     if not membership_plan:
         raise HTTPException(status_code=404, detail="Membership plan not found")
 
@@ -97,7 +98,7 @@ async def create_checkout_session(membership_plan_id: str,
 
 @router.post("/webhook/subscription")
 async def webhook_subscription(request: Request,
-                               db: Session = Depends(get_db), ):
+                               db: AsyncSession = Depends(get_db), ):
     try:
         payload = await request.body()
     except Exception as e:
@@ -134,7 +135,7 @@ async def webhook_subscription(request: Request,
         # Create or renew membership
         if payment_intent.get('payment_status', '') == 'paid' and payment_intent.get('mode', '') == 'subscription':
 
-            crud_membership.company_membership.create(
+            await crud_membership.company_membership.create(
                 db,
                 company_id=payment_intent.get('metadata', {})['company_id'],
                 obj_in=CompanyMembershipCreate(
@@ -159,7 +160,7 @@ async def redirect_webhook(request: Request):
 async def webhook(request: Request,
                   response: Response,
                   stripe_signature: str = Header(None),
-                  db: Session = Depends(get_db), ):
+                  db: AsyncSession = Depends(get_db), ):
     try:
         payload = await request.body()
     except Exception as e:
@@ -195,9 +196,9 @@ async def webhook(request: Request,
             return JSONResponse(content={"success": False})
         if not payment_intent.get('company_id', None):
             return JSONResponse(content={"success": False})
-        active = crud_membership.company_membership.get_active_membership(db, company_id=payment_intent['company_id'])
+        active = await crud_membership.company_membership.get_active_membership(db, company_id=payment_intent['company_id'])
         if active:
-            crud_membership.company_membership.cancel(db, id=str(active.id))
+            await crud_membership.company_membership.cancel(db, id=str(active.id))
 
     else:
         print(f"Unhandled event type {event['type']}")
@@ -205,10 +206,10 @@ async def webhook(request: Request,
     return JSONResponse(content={"success": True})
 
 @router.post("/webhook/subscription", response_model=DataResponse, status_code=status.HTTP_200_OK)
-def subscription_webhook(
+async def subscription_webhook(
     payload: dict,
     response: Response,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     x_webhook_token: Optional[str] = Header(default=None, alias="X-Webhook-Token")
 ) -> DataResponse:
     """
@@ -256,7 +257,7 @@ def subscription_webhook(
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
             # Create or renew membership
-            crud_membership.company_membership.create(
+            await crud_membership.company_membership.create(
                 db,
                 company_id=company_id,
                 obj_in=CompanyMembershipCreate(
@@ -270,7 +271,7 @@ def subscription_webhook(
             )
         elif event in ("subscription.canceled", "subscription.failed"):
             # Cancel current active membership if any
-            active = crud_membership.company_membership.get_active_membership(db, company_id=company_id)
+            active = await crud_membership.company_membership.get_active_membership(db, company_id=company_id)
             if active:
                 crud_membership.company_membership.cancel(db, id=str(active.id))
             return DataResponse.success_response(
@@ -284,7 +285,7 @@ def subscription_webhook(
                 status_code=status.HTTP_200_OK
             )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to process subscription webhook: {str(e)}",

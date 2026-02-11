@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     def get_database_url(self):
         return self.DATABASE_URL or f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}/{self.POSTGRES_DB}"
 
+    def get_async_database_url(self):
+        """Return async PostgreSQL URL for asyncpg driver"""
+        if self.DATABASE_URL:
+            # Replace postgresql:// with postgresql+asyncpg://
+            return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}/{self.POSTGRES_DB}"
+
 
 settings = Settings()
 # settings.DATABASE_URL = settings._build_database_url()

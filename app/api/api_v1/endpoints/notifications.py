@@ -26,7 +26,7 @@ async def get_company_notifications(
     """
     Get paginated notifications for the current user
     """
-    notifications, pagination_info = crud_notification.get_user_notifications(
+    notifications, pagination_info = await crud_notification.get_user_notifications(
         db=db,
         company_id=company_id,
         page=page,
@@ -66,7 +66,7 @@ async def get_all_count(
     """
     Get count of all notifications for the current company
     """
-    count = crud_notification.get_all_count(db=db, company_id=company_id)
+    count = await crud_notification.get_all_count(db=db, company_id=company_id)
 
     return DataResponse.success_response(
         data={'all_count': count},

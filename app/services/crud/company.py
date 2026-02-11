@@ -2,7 +2,9 @@ import uuid
 from typing import Optional, List
 from datetime import date
 from pydantic.v1 import UUID4
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTimeOffs, CategoryServices, \
     CompanyCategories, CompanyEmails, CompanyPhones, Users
@@ -17,26 +19,35 @@ from app.services.auth import hash_password
 from app.core.datetime_utils import utcnow
 
 
-def get(db: Session, id: str) -> Optional[Companies]:
-    return db.query(Companies).filter(Companies.id == id).first()
+async def get(db: AsyncSession, id: str) -> Optional[Companies]:
+    stmt = select(Companies).filter(Companies.id == id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def get_by_slug(db: Session, slug: str) -> Optional[Companies]:
-    return db.query(Companies).filter(Companies.slug == slug).first()
+async def get_by_slug(db: AsyncSession, slug: str) -> Optional[Companies]:
+    stmt = select(Companies).filter(Companies.slug == slug)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def get_company_users(db: Session, company_id: str) -> List[CompanyUsers]:
+async def get_company_users(db: AsyncSession, company_id: str) -> List[CompanyUsers]:
     """Get all users belonging to the given company."""
-    return list(db.query(CompanyUsers).filter(CompanyUsers.company_id == company_id).all())
+    stmt = (select(CompanyUsers)
+            .options(selectinload(CompanyUsers.user))  # Eager load user details
+            .filter(CompanyUsers.company_id == company_id))
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
-def get_company_user(db: Session, company_id: str, user_id: str) -> Optional[CompanyUser]:
+async def get_company_user(db: AsyncSession, company_id: str, user_id: str) -> Optional[CompanyUser]:
     """Get company user with user details."""
-    company_user = (db.query(CompanyUsers)
-                    .join(Users, Users.id == CompanyUsers.user_id)
-                    .filter(CompanyUsers.company_id == company_id, CompanyUsers.user_id == user_id)
-                    .first())
-    
+    stmt = (select(CompanyUsers)
+            .join(Users, Users.id == CompanyUsers.user_id)
+            .filter(CompanyUsers.company_id == company_id, CompanyUsers.user_id == user_id))
+    result = await db.execute(stmt)
+    company_user = result.scalar_one_or_none()
+
     if not company_user:
         return None
     
@@ -44,72 +55,78 @@ def get_company_user(db: Session, company_id: str, user_id: str) -> Optional[Com
     return CompanyUser.model_validate(company_user)
 
 
-def get_company_services(db: Session, company_id: str) -> List[CompanyCategories]:
+async def get_company_services(db: AsyncSession, company_id: str) -> List[CompanyCategories]:
     """Get all services belonging to the given company."""
-    return list(db.query(CompanyCategories).join(CategoryServices, CategoryServices.category_id==CompanyCategories.id)
-                .filter(CompanyCategories.company_id == company_id).all())
+    stmt = (select(CompanyCategories)
+            .join(CategoryServices, CategoryServices.category_id == CompanyCategories.id)
+            .filter(CompanyCategories.company_id == company_id))
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
-def get_company_all_users_availabilities(db: Session, company_id: str) -> List:
+async def get_company_all_users_availabilities(db: AsyncSession, company_id: str) -> List:
     """Get all availabilities for users belonging to the given company."""
-    return (db.query(UserAvailabilities)
-     .join(CompanyUsers, UserAvailabilities.user_id == CompanyUsers.user_id).filter(
-        CompanyUsers.company_id == company_id,
-        UserAvailabilities.is_available == True
-    ).all())
+    stmt = (select(UserAvailabilities)
+            .join(CompanyUsers, UserAvailabilities.user_id == CompanyUsers.user_id)
+            .filter(CompanyUsers.company_id == company_id, UserAvailabilities.is_available == True))
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def get_company_user_availabilities(db: Session, user_id: str, company_id: str) -> List:
+async def get_company_user_availabilities(db: AsyncSession, user_id: str, company_id: str) -> List:
     """Get all availabilities for users belonging to the given company."""
-    return (db.query(UserAvailabilities)
-     .join(CompanyUsers, UserAvailabilities.user_id == CompanyUsers.user_id).filter(
-        CompanyUsers.company_id == company_id,
-        CompanyUsers.user_id == user_id,
-        UserAvailabilities.is_available == True
-    ).all())
+    stmt = (select(UserAvailabilities)
+            .join(CompanyUsers, UserAvailabilities.user_id == CompanyUsers.user_id)
+            .filter(CompanyUsers.company_id == company_id,
+                    CompanyUsers.user_id == user_id,
+                    UserAvailabilities.is_available == True))
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def get_company_all_users_time_offs(db: Session, company_id: str, start_date: date, end_date: date) -> List:
+async def get_company_all_users_time_offs(db: AsyncSession, company_id: str, start_date: date, end_date: date) -> List:
     """Get all time-offs within a date range"""
-    return (db.query(UserTimeOffs, CompanyUsers.user_id)
-     .join(CompanyUsers, UserTimeOffs.user_id == CompanyUsers.user_id).filter(
-        CompanyUsers.company_id == company_id,
-        UserTimeOffs.start_date <= end_date,
-        UserTimeOffs.end_date >= start_date
-    ).all())
+    stmt = (select(UserTimeOffs, CompanyUsers.user_id)
+            .join(CompanyUsers, UserTimeOffs.user_id == CompanyUsers.user_id)
+            .filter(CompanyUsers.company_id == company_id,
+                    UserTimeOffs.start_date <= end_date,
+                    UserTimeOffs.end_date >= start_date))
+    result = await db.execute(stmt)
+    return result.all()
 
 
-def get_company_user_time_offs(db: Session, user_id: str, company_id: str, start_date: date, end_date: date) -> List:
+async def get_company_user_time_offs(db: AsyncSession, user_id: str, company_id: str, start_date: date, end_date: date) -> List:
     """Get all time-offs within a date range"""
-    return (db.query(UserTimeOffs, CompanyUsers.user_id)
-     .join(CompanyUsers, UserTimeOffs.user_id == CompanyUsers.user_id).filter(
-        CompanyUsers.company_id == company_id,
-        CompanyUsers.user_id == user_id,
-        UserTimeOffs.start_date <= end_date,
-        UserTimeOffs.end_date >= start_date
-    ).all())
+    stmt = (select(UserTimeOffs, CompanyUsers.user_id)
+            .join(CompanyUsers, UserTimeOffs.user_id == CompanyUsers.user_id)
+            .filter(CompanyUsers.company_id == company_id,
+                    CompanyUsers.user_id == user_id,
+                    UserTimeOffs.start_date <= end_date,
+                    UserTimeOffs.end_date >= start_date))
+    result = await db.execute(stmt)
+    return result.all()
 
 
-def create(db: Session, *, obj_in: CompanyCreate, current_user: User) -> Companies:
+async def create(db: AsyncSession, *, obj_in: CompanyCreate, current_user: User) -> Companies:
 
     db_obj = Companies(**obj_in.model_dump())
     # db_obj.id = str(uuid.uuid4())
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
 
     cmp_usr_obj = CompanyUsers(user_id=current_user.id,
                                company_id=db_obj.id,
                                role=CompanyRoleType.admin,
                                status=StatusType.active)
     db.add(cmp_usr_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
 
     return db_obj
 
 
-def update(db: Session, *, db_obj: Companies, obj_in: CompanyUpdate) -> Companies:
+async def update(db: AsyncSession, *, db_obj: Companies, obj_in: CompanyUpdate) -> Companies:
     """
     Update company information
 
@@ -129,12 +146,12 @@ def update(db: Session, *, db_obj: Companies, obj_in: CompanyUpdate) -> Companie
     db_obj.updated_at = utcnow()
     
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
 
-def create_company_email(db: Session, *, obj_in: CompanyEmailCreate):
+async def create_company_email(db: AsyncSession, *, obj_in: CompanyEmailCreate):
     """
     Create new emails for a company, handling duplicate emails
 
@@ -146,9 +163,9 @@ def create_company_email(db: Session, *, obj_in: CompanyEmailCreate):
         List of created/updated email objects
     """
     # Get existing emails for this company to check duplicates
-    existing_emails = db.query(CompanyEmails).filter(
-        CompanyEmails.company_id == obj_in.company_id
-    ).all()
+    stmt = select(CompanyEmails).filter(CompanyEmails.company_id == obj_in.company_id)
+    result = await db.execute(stmt)
+    existing_emails = result.scalars().all()
 
     # Create a set of existing email addresses for efficient lookup
     existing_email_set = {str(email.email).lower() for email in existing_emails}
@@ -169,44 +186,49 @@ def create_company_email(db: Session, *, obj_in: CompanyEmailCreate):
         db.add(db_obj)
 
     # Commit all new emails at once
-    db.commit()
+    await db.commit()
 
 
-def get_company_emails(db: Session, company_id: str) -> List[CompanyEmails]:
+async def get_company_emails(db: AsyncSession, company_id: str) -> List[CompanyEmails]:
     """
     Get all emails for a specific company
     """
-    company_emails = db.query(CompanyEmails).filter(CompanyEmails.company_id == company_id).all()
+    stmt = select(CompanyEmails).filter(CompanyEmails.company_id == company_id)
+    result = await db.execute(stmt)
+    company_emails = result.scalars().all()
 
     return company_emails
 
 
-
-def get_company_email(db: Session, email_id: str) -> Optional[CompanyEmails]:
+async def get_company_email(db: AsyncSession, email_id: str) -> Optional[CompanyEmails]:
     """
     Get a specific company email by ID
     """
-    return db.query(CompanyEmails).filter(CompanyEmails.id == email_id).first()
+    stmt = select(CompanyEmails).filter(CompanyEmails.id == email_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def delete_company_email(db: Session, email_id: str, company_id: str) -> bool:
+async def delete_company_email(db: AsyncSession, email_id: str, company_id: str) -> bool:
     """
     Delete a company email
     """
-    db_obj = db.query(CompanyEmails).filter(
+    stmt = select(CompanyEmails).filter(
         CompanyEmails.id == email_id,
         CompanyEmails.company_id == company_id
-    ).first()
+    )
+    result = await db.execute(stmt)
+    db_obj = result.scalar_one_or_none()
 
     if not db_obj:
         return False
 
-    db.delete(db_obj)
-    db.commit()
+    await db.delete(db_obj)
+    await db.commit()
     return True
 
 
-def create_company_phone(db: Session, *, obj_in: CompanyPhoneCreate) -> List[CompanyPhones]:
+async def create_company_phone(db: AsyncSession, *, obj_in: CompanyPhoneCreate) -> List[CompanyPhones]:
     """
     Create new phone numbers for a company, handling duplicate phone numbers
 
@@ -218,9 +240,9 @@ def create_company_phone(db: Session, *, obj_in: CompanyPhoneCreate) -> List[Com
         List of created phone number objects
     """
     # Get existing phone numbers for this company to check duplicates
-    existing_phones = db.query(CompanyPhones).filter(
-        CompanyPhones.company_id == obj_in.company_id
-    ).all()
+    stmt = select(CompanyPhones).filter(CompanyPhones.company_id == obj_in.company_id)
+    result = await db.execute(stmt)
+    existing_phones = result.scalars().all()
 
     # Create a set of existing phone numbers for efficient lookup
     existing_phone_set = {phone.phone for phone in existing_phones}
@@ -245,47 +267,53 @@ def create_company_phone(db: Session, *, obj_in: CompanyPhoneCreate) -> List[Com
         created_phones.append(db_obj)
 
     # Commit all new phone numbers at once
-    db.commit()
+    await db.commit()
 
     # Refresh all newly created objects
     for phone in created_phones:
-        db.refresh(phone)
+        await db.refresh(phone)
 
     return created_phones
 
 
-def get_company_phones(db: Session, company_id: str) -> List[CompanyPhones]:
+async def get_company_phones(db: AsyncSession, company_id: str) -> List[CompanyPhones]:
     """
     Get all phone numbers for a specific company
     """
-    return db.query(CompanyPhones).filter(CompanyPhones.company_id == company_id).all()
+    stmt = select(CompanyPhones).filter(CompanyPhones.company_id == company_id)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def get_company_phone(db: Session, phone_id: str) -> Optional[CompanyPhones]:
+async def get_company_phone(db: AsyncSession, phone_id: str) -> Optional[CompanyPhones]:
     """
     Get a specific company phone by ID
     """
-    return db.query(CompanyPhones).filter(CompanyPhones.id == phone_id).first()
+    stmt = select(CompanyPhones).filter(CompanyPhones.id == phone_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def delete_company_phone(db: Session, phone_id: str, company_id: str) -> bool:
+async def delete_company_phone(db: AsyncSession, phone_id: str, company_id: str) -> bool:
     """
     Delete a company phone number
     """
-    db_obj = db.query(CompanyPhones).filter(
+    stmt = select(CompanyPhones).filter(
         CompanyPhones.id == phone_id,
         CompanyPhones.company_id == company_id
-    ).first()
-    
+    )
+    result = await db.execute(stmt)
+    db_obj = result.scalar_one_or_none()
+
     if not db_obj:
         return False
 
-    db.delete(db_obj)
-    db.commit()
+    await db.delete(db_obj)
+    await db.commit()
     return True
 
 
-def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, role: CompanyRoleType) -> CompanyUsers:
+async def create_company_member(db: AsyncSession, *, user_in: UserCreate, company_id: str, role: CompanyRoleType) -> CompanyUsers:
     """
     Create a new user and add them to a company with the specified role.
 
@@ -301,14 +329,18 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
     from app.services.crud import user_availability as crud_user_availability
 
     # Check if user with this email already exists
-    existing_user = db.query(Users).filter(Users.email == user_in.email).first()
+    stmt = select(Users).filter(Users.email == user_in.email)
+    result = await db.execute(stmt)
+    existing_user = result.scalar_one_or_none()
 
     if existing_user:
         # Check if user is already part of this company
-        existing_company_user = db.query(CompanyUsers).filter(
+        stmt = select(CompanyUsers).filter(
             CompanyUsers.user_id == existing_user.id,
             CompanyUsers.company_id == company_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        existing_company_user = result.scalar_one_or_none()
 
         if existing_company_user:
             raise ValueError("User is already a member of this company")
@@ -321,12 +353,12 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
             status=StatusType.active
         )
         db.add(company_user)
-        db.commit()
-        db.refresh(company_user)
+        await db.commit()
+        await db.refresh(company_user)
 
         # Handle availabilities for existing user
         if user_in.availabilities:
-            crud_user_availability.update_user_availabilities(db, str(existing_user.id), user_in.availabilities)
+            await crud_user_availability.update_user_availabilities(db, str(existing_user.id), user_in.availabilities)
 
         return company_user
 
@@ -339,8 +371,8 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
     new_user.status = StatusType.active
 
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    await db.commit()
+    await db.refresh(new_user)
 
     # Add user to company
     company_user = CompanyUsers(
@@ -350,17 +382,17 @@ def create_company_member(db: Session, *, user_in: UserCreate, company_id: str, 
         status=StatusType.active
     )
     db.add(company_user)
-    db.commit()
-    db.refresh(company_user)
+    await db.commit()
+    await db.refresh(company_user)
 
     # Handle availabilities for new user
     if user_in.availabilities:
-        crud_user_availability.bulk_create_user_availabilities(db, str(new_user.id), user_in.availabilities)
+        await crud_user_availability.bulk_create_user_availabilities(db, str(new_user.id), user_in.availabilities)
 
     return company_user
 
 
-def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: CompanyUserUpdate) -> Optional[CompanyUsers]:
+async def update_company_user(db: AsyncSession, *, company_id: str, user_id: str, obj_in: CompanyUserUpdate) -> Optional[CompanyUsers]:
     """
     Update a company user's role, status, user profile fields, and availabilities.
 
@@ -375,10 +407,12 @@ def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: C
     """
     from app.services.crud import user_availability as crud_user_availability
 
-    company_user = db.query(CompanyUsers).filter(
+    stmt = select(CompanyUsers).filter(
         CompanyUsers.company_id == company_id,
         CompanyUsers.user_id == user_id
-    ).first()
+    )
+    result = await db.execute(stmt)
+    company_user = result.scalar_one_or_none()
 
     if not company_user:
         return None
@@ -397,7 +431,10 @@ def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: C
             setattr(company_user, field, value)
 
     # Update User fields
-    user = db.query(Users).filter(Users.id == user_id).first()
+    stmt = select(Users).filter(Users.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
     if user:
         for field, value in obj_in.items():
             if field in user_fields and hasattr(user, field) and value is not None:
@@ -409,17 +446,17 @@ def update_company_user(db: Session, *, company_id: str, user_id: str, obj_in: C
     company_user.updated_at = utcnow()
 
     db.add(company_user)
-    db.commit()
-    db.refresh(company_user)
+    await db.commit()
+    await db.refresh(company_user)
 
     # Handle availabilities update
     if availabilities is not None:
-        crud_user_availability.update_user_availabilities(db, user_id, availabilities)
+        await crud_user_availability.update_user_availabilities(db, user_id, availabilities)
 
     return company_user
 
 
-def delete_company_user(db: Session, *, company_id: str, user_id: str) -> bool:
+async def delete_company_user(db: AsyncSession, *, company_id: str, user_id: str) -> bool:
     """
     Remove a user from a company (soft delete by setting status to inactive).
 
@@ -431,10 +468,12 @@ def delete_company_user(db: Session, *, company_id: str, user_id: str) -> bool:
     Returns:
         True if user was removed, False if not found
     """
-    company_user = db.query(CompanyUsers).filter(
+    stmt = select(CompanyUsers).filter(
         CompanyUsers.company_id == company_id,
         CompanyUsers.user_id == user_id
-    ).first()
+    )
+    result = await db.execute(stmt)
+    company_user = result.scalar_one_or_none()
 
     if not company_user:
         return False
@@ -444,7 +483,7 @@ def delete_company_user(db: Session, *, company_id: str, user_id: str) -> bool:
     company_user.updated_at = utcnow()
 
     db.add(company_user)
-    db.commit()
+    await db.commit()
 
     return True
 

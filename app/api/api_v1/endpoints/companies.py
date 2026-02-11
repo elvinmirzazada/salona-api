@@ -2,7 +2,8 @@ import uuid
 from typing import List
 from datetime import date, timedelta, datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Response, File, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.api.dependencies import (
     get_current_active_user,
     get_current_active_customer,
@@ -40,14 +41,14 @@ router = APIRouter()
 @router.post("", response_model=DataResponse[Company], status_code=status.HTTP_201_CREATED)
 async def create_company(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_in: CompanyCreate,
     current_user: User = Depends(get_current_active_user)
 ) -> DataResponse:
     """
     Create a new company.
     """
-    company = crud_company.create(db=db, obj_in=company_in, current_user=current_user)
+    company = await crud_company.create(db=db, obj_in=company_in, current_user=current_user)
     return DataResponse.success_response(
         data=company,
         message="Company created successfully",
@@ -63,7 +64,7 @@ async def get_user_availability(
         date_from: date = Query(..., description="Start date for availability check"),
         service_ids: List[str] = Query(None, description="List of service IDs to calculate availability based on combined service duration"),
         response: Response,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         company_id: str
 ) -> DataResponse[AvailabilityResponse]:
     """
@@ -80,13 +81,13 @@ async def get_user_availability(
         if service_ids:
             total_duration = 0
             for service_id in service_ids:
-                service = crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
+                service = await crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
                 if service:
                     total_duration += service.duration
             service_duration_minutes = total_duration if total_duration > 0 else None
 
         # Get user's regular availability
-        availabilities = crud_company.get_company_user_availabilities(db, user_id=user_id, company_id=company_id)
+        availabilities = await crud_company.get_company_user_availabilities(db, user_id=user_id, company_id=company_id)
         if not availabilities:
             response.status_code = status.HTTP_200_OK
             return DataResponse.success_response(
@@ -99,7 +100,7 @@ async def get_user_availability(
             )
 
         # Get user's time-offs
-        time_offs = crud_company.get_company_user_time_offs(
+        time_offs = await crud_company.get_company_user_time_offs(
             db,
             user_id=user_id,
             company_id=company_id,
@@ -111,7 +112,7 @@ async def get_user_availability(
         )
 
         # Get existing bookings
-        bookings = crud_booking.get_user_bookings_in_range(
+        bookings = await crud_booking.get_user_bookings_in_range(
             db,
             user_id=user_id,
             start_date=date_from,
@@ -158,14 +159,14 @@ async def get_company_all_users_availabilities(
         availability_type: AvailabilityType = Query(..., description="Type of availability check: daily, weekly, or monthly"),
         date_from: date = Query(..., description="Start date for availability check"),
         response: Response,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         company_id: str
 ) -> DataResponse[list[AvailabilityResponse]]:
     """
     Get availabilities for all users for a specific time range. Optimized to fetch all data in bulk and group bookings by user via BookingServices.
     """
     try:
-        company_users = crud_company.get_company_users(db, company_id)
+        company_users = await crud_company.get_company_users(db, company_id)
         if not company_users:
             response.status_code = status.HTTP_404_NOT_FOUND
             return DataResponse.error_response(
@@ -173,8 +174,8 @@ async def get_company_all_users_availabilities(
                 status_code=status.HTTP_404_NOT_FOUND
             )
         # Bulk fetch all related data
-        availabilities = crud_company.get_company_all_users_availabilities(db, company_id)
-        time_offs = crud_company.get_company_all_users_time_offs(
+        availabilities = await crud_company.get_company_all_users_availabilities(db, company_id)
+        time_offs = await crud_company.get_company_all_users_time_offs(
             db,
             company_id=company_id,
             start_date=date_from,
@@ -183,7 +184,7 @@ async def get_company_all_users_availabilities(
                      7 if availability_type == AvailabilityType.WEEKLY else 31
             )
         )
-        booking_tuples = crud_booking.get_all_bookings_in_range(
+        booking_tuples = await crud_booking.get_all_bookings_in_range(
             db,
             start_date=date_from,
             end_date=date_from + timedelta(
@@ -238,7 +239,7 @@ async def get_company_all_users_availabilities(
 
 @router.get("/users", response_model=DataResponse[List[CompanyUser]])
 async def get_company_users(
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
         user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can list staff
 ) -> DataResponse:
@@ -251,7 +252,7 @@ async def get_company_users(
             message="No company associated with the current user",
             status_code=status.HTTP_404_NOT_FOUND
         )
-    users = crud_company.get_company_users(
+    users = await crud_company.get_company_users(
         db=db, company_id=company_id
     )
     return DataResponse.success_response(
@@ -263,13 +264,13 @@ async def get_company_users(
 
 @router.get("/services", response_model=DataResponse[List[CompanyCategoryWithServicesResponse]])
 async def get_company_services(
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
 ) -> DataResponse:
     """
     Get all businesses owned by the authenticated professional.
     """
-    services = crud_service.get_company_services(
+    services = await crud_service.get_company_services(
         db=db, company_id=company_id
     )
 
@@ -282,7 +283,7 @@ async def get_company_services(
 
 @router.get('/customers', response_model=DataResponse[List[CompanyCustomer]])
 async def get_company_customers(
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
         user_role: CompanyRoleType = Depends(require_staff_or_higher)  # Staff and above can view customers
 ) -> DataResponse:
@@ -290,7 +291,7 @@ async def get_company_customers(
     Get all customers who have bookings with the company.
     Requires staff, admin, or owner role.
     """
-    customers = crud_customer.get_company_customers(
+    customers = await crud_customer.get_company_customers(
         db=db, company_id=company_id
     )
     customers = [Customer.model_validate(customer) for customer in customers]
@@ -303,7 +304,7 @@ async def get_company_customers(
 
 @router.get('/user-time-offs', response_model=DataResponse[List[TimeOff]])
 async def get_company_user_time_offs(
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         company_id: str = Depends(get_current_company_id),
         availability_type: AvailabilityType = Query(..., description="Type of availability check: daily, weekly, or monthly"),
         date_from: date = Query(..., description="Start date for availability check"),
@@ -318,7 +319,7 @@ async def get_company_user_time_offs(
         days=1 if availability_type == AvailabilityType.DAILY else
         7 if availability_type == AvailabilityType.WEEKLY else 31
     )
-    time_offs = crud_user_time_off.get_company_user_time_offs(
+    time_offs = await crud_user_time_off.get_company_user_time_offs(
         db=db, company_id=company_id, start_date=start_date, end_date=end_date
     )
 
@@ -332,14 +333,14 @@ async def get_company_user_time_offs(
 @router.get("", response_model=DataResponse[Company])
 async def get_company(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Get a specific business by ID.
     Only the owner can access their business details.
     """
-    company = crud_company.get(db=db, id=company_id)
+    company = await crud_company.get(db=db, id=company_id)
     if not company:
         return DataResponse.error_response(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -353,14 +354,14 @@ async def get_company(
 @router.get("/{company_id}", response_model=DataResponse[Company])
 async def get_company_by_id(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str
 ) -> DataResponse:
     """
     Get a specific business by ID.
     Only the owner can access their business details.
     """
-    company = crud_company.get(db=db, id=company_id)
+    company = await crud_company.get(db=db, id=company_id)
     if not company:
         return DataResponse.error_response(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -374,14 +375,14 @@ async def get_company_by_id(
 @router.get("/slug/{slug}", response_model=DataResponse[Company])
 async def get_company_by_slug(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     slug: str
 ) -> DataResponse:
     """
     Get a specific business by ID.
     Only the owner can access their business details.
     """
-    company = crud_company.get_by_slug(db=db, slug=slug)
+    company = await crud_company.get_by_slug(db=db, slug=slug)
     if not company:
         return DataResponse.error_response(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -394,16 +395,18 @@ async def get_company_by_slug(
 @router.get("/{company_id}/address", response_model=DataResponse[CompanyAddressResponse])
 async def get_company_address(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str
 ) -> DataResponse:
     """
     Get the company's address by company_id.
     """
     try:
-        address = db.query(CompanyAddresses).filter(
+        stmt = select(CompanyAddresses).filter(
             CompanyAddresses.company_id == company_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        address = result.scalar_one_or_none()
 
         if not address:
             return DataResponse.error_response(
@@ -420,7 +423,7 @@ async def get_company_address(
             status_code=status.HTTP_200_OK
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to retrieve company address: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -430,7 +433,7 @@ async def get_company_address(
 @router.post("/address", response_model=DataResponse[CompanyAddressResponse], status_code=status.HTTP_201_CREATED)
 async def create_company_address(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     address_in: CompanyAddressCreate,
     company_id: str = Depends(get_current_company_id),
     user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can add address
@@ -442,9 +445,11 @@ async def create_company_address(
     """
     try:
         # Check if address already exists for this company
-        existing_address = db.query(CompanyAddresses).filter(
+        stmt = select(CompanyAddresses).filter(
             CompanyAddresses.company_id == company_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        existing_address = result.scalar_one_or_none()
 
         if existing_address:
             # Update existing address
@@ -452,9 +457,9 @@ async def create_company_address(
                 setattr(existing_address, field, value)
             existing_address.updated_at = datetime.now()
             db.add(existing_address)
-            db.commit()
-            db.refresh(existing_address)
-            
+            await db.commit()
+            await db.refresh(existing_address)
+
             return DataResponse.success_response(
                 data=CompanyAddressResponse.model_validate(existing_address),
                 message="Company address updated successfully",
@@ -468,8 +473,8 @@ async def create_company_address(
                 **address_in.model_dump()
             )
             db.add(new_address)
-            db.commit()
-            db.refresh(new_address)
+            await db.commit()
+            await db.refresh(new_address)
 
             return DataResponse.success_response(
                 data=CompanyAddressResponse.model_validate(new_address),
@@ -477,7 +482,7 @@ async def create_company_address(
                 status_code=status.HTTP_201_CREATED
             )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to save company address: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -487,7 +492,7 @@ async def create_company_address(
 @router.patch("", response_model=DataResponse[Company])
 async def update_company(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_in: CompanyUpdate,
     company_id: str = Depends(get_current_company_id),
     user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can update company
@@ -496,7 +501,7 @@ async def update_company(
     Update company information.
     Requires admin or owner role.
     """
-    company = crud_company.get(db=db, id=company_id)
+    company = await crud_company.get(db=db, id=company_id)
     if not company:
         return DataResponse.error_response(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -504,7 +509,7 @@ async def update_company(
         )
 
     try:
-        updated_company = crud_company.update(
+        updated_company = await crud_company.update(
             db=db,
             db_obj=company,
             obj_in=company_in
@@ -514,7 +519,7 @@ async def update_company(
             message="Company information updated successfully"
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to update company information: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -524,7 +529,7 @@ async def update_company(
 @router.post("/logo", response_model=DataResponse[dict])
 async def upload_company_logo(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
     company_id: str = Depends(get_current_company_id),
     user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can upload logo
@@ -559,14 +564,14 @@ async def upload_company_logo(
         )
 
         # Update company record
-        company = crud_company.get(db=db, id=company_id)
+        company = await crud_company.get(db=db, id=company_id)
         if not company:
             return DataResponse.error_response(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Company not found"
             )
 
-        _ = crud_company.update(
+        _ = await crud_company.update(
             db=db,
             db_obj=company,
             obj_in=CompanyUpdate(logo_url=logo_url)
@@ -586,7 +591,7 @@ async def upload_company_logo(
 @router.delete("/logo", response_model=DataResponse)
 async def delete_company_logo(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str = Depends(get_current_company_id),
     user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner can delete logo
 ) -> DataResponse:
@@ -596,7 +601,7 @@ async def delete_company_logo(
     """
     try:
         # Get company
-        company = crud_company.get(db=db, id=company_id)
+        company = await crud_company.get(db=db, id=company_id)
         if not company:
             return DataResponse.error_response(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -604,7 +609,7 @@ async def delete_company_logo(
             )
 
         # Update company record to remove logo
-        _ = crud_company.update(
+        _ = await crud_company.update(
             db=db,
             db_obj=company,
             obj_in=CompanyUpdate(logo_url=None)
@@ -623,7 +628,7 @@ async def delete_company_logo(
 @router.post("/emails", response_model=DataResponse, status_code=status.HTTP_201_CREATED)
 async def add_company_email(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     email_in: CompanyEmailCreate,
     company_id: str = Depends(get_current_company_id),
     user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner
@@ -634,14 +639,14 @@ async def add_company_email(
     """
     try:
         email_in.company_id = company_id
-        crud_company.create_company_email(db=db, obj_in=email_in)
+        await crud_company.create_company_email(db=db, obj_in=email_in)
 
         return DataResponse.success_response(
             message="Emails added successfully",
             status_code=status.HTTP_201_CREATED
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to add emails: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -651,13 +656,13 @@ async def add_company_email(
 @router.get("/all/emails", response_model=DataResponse[List[CompanyEmail]])
 async def get_company_emails(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Get all email addresses associated with the company.
     """
-    emails = crud_company.get_company_emails(db=db, company_id=company_id)
+    emails = await crud_company.get_company_emails(db=db, company_id=company_id)
 
     return DataResponse.success_response(
         data=emails,
@@ -669,7 +674,7 @@ async def get_company_emails(
 @router.delete("/emails/{email_id}", response_model=DataResponse)
 async def delete_company_email(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     email_id: str,
     company_id: str = Depends(get_current_company_id),
     user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner
@@ -678,7 +683,7 @@ async def delete_company_email(
     Delete an email address from the company.
     Requires admin or owner role.
     """
-    success = crud_company.delete_company_email(db=db, email_id=email_id, company_id=company_id)
+    success = await crud_company.delete_company_email(db=db, email_id=email_id, company_id=company_id)
 
     if not success:
         return DataResponse.error_response(
@@ -695,7 +700,7 @@ async def delete_company_email(
 @router.post("/phones", response_model=DataResponse[List[CompanyPhone]], status_code=status.HTTP_201_CREATED)
 async def add_company_phone(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     phone_in: CompanyPhoneCreate,
     company_id: str = Depends(get_current_company_id),
     user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner
@@ -707,7 +712,7 @@ async def add_company_phone(
     try:
         # Set the company ID from the authenticated user's context
         phone_in.company_id = company_id
-        phones = crud_company.create_company_phone(db=db, obj_in=phone_in)
+        phones = await crud_company.create_company_phone(db=db, obj_in=phone_in)
 
         return DataResponse.success_response(
             data=phones,
@@ -715,7 +720,7 @@ async def add_company_phone(
             status_code=status.HTTP_201_CREATED
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to add phone numbers: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -725,13 +730,13 @@ async def add_company_phone(
 @router.get("/all/phones", response_model=DataResponse[List[CompanyPhone]])
 async def get_company_phones(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Get all phone numbers associated with the company.
     """
-    phones = crud_company.get_company_phones(db=db, company_id=company_id)
+    phones = await crud_company.get_company_phones(db=db, company_id=company_id)
 
     return DataResponse.success_response(
         data=phones,
@@ -743,7 +748,7 @@ async def get_company_phones(
 @router.delete("/phones/{phone_id}", response_model=DataResponse)
 async def delete_company_phone(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     phone_id: str,
     company_id: str = Depends(get_current_company_id),
     user_role: CompanyRoleType = Depends(require_admin_or_owner)  # Only admin or owner
@@ -752,7 +757,7 @@ async def delete_company_phone(
     Delete a phone number from the company.
     Requires admin or owner role.
     """
-    success = crud_company.delete_company_phone(db=db, phone_id=phone_id, company_id=company_id)
+    success = await crud_company.delete_company_phone(db=db, phone_id=phone_id, company_id=company_id)
 
     if not success:
         return DataResponse.error_response(
@@ -767,7 +772,7 @@ async def delete_company_phone(
 @router.post("/members", response_model=DataResponse[CompanyUser], status_code=status.HTTP_201_CREATED)
 async def add_company_member(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user_in: UserCreate,
     role: CompanyRoleType = Query(..., description="Role to assign to the user in the company"),
     company_id: str = Depends(get_current_company_id),
@@ -779,7 +784,7 @@ async def add_company_member(
     Requires admin or owner role.
     """
     try:
-        company_user = crud_company.create_company_member(
+        company_user = await crud_company.create_company_member(
             db=db,
             user_in=user_in,
             company_id=company_id,
@@ -796,7 +801,7 @@ async def add_company_member(
             status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to add member to company: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -806,7 +811,7 @@ async def add_company_member(
 @router.put("/members/{user_id}", response_model=DataResponse[CompanyUser])
 async def update_company_member(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user_id: str,
     company_id: str = Depends(get_current_company_id),
     user_update: CompanyUserUpdate,
@@ -826,7 +831,7 @@ async def update_company_member(
             )
 
         # Update the company user
-        updated_company_user = crud_company.update_company_user(
+        updated_company_user = await crud_company.update_company_user(
             db=db,
             company_id=company_id,
             user_id=user_id,
@@ -840,7 +845,7 @@ async def update_company_member(
             )
 
         # Get the updated company user with user details
-        company_user = crud_company.get_company_user(db=db, company_id=company_id, user_id=user_id)
+        company_user = await crud_company.get_company_user(db=db, company_id=company_id, user_id=user_id)
 
         return DataResponse.success_response(
             data=company_user,
@@ -849,7 +854,7 @@ async def update_company_member(
         )
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to update company member: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -859,7 +864,7 @@ async def update_company_member(
 @router.delete("/members/{user_id}", response_model=DataResponse)
 async def remove_company_member(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user_id: str,
     company_id: str = Depends(get_current_company_id),
     _: None = Depends(require_admin_or_owner)  # Only admin or owner can remove members
@@ -870,7 +875,7 @@ async def remove_company_member(
     """
     try:
         # Check if the user exists in the company first
-        existing_user = crud_company.get_company_user(db=db, company_id=company_id, user_id=user_id)
+        existing_user = await crud_company.get_company_user(db=db, company_id=company_id, user_id=user_id)
         if not existing_user:
             return DataResponse.error_response(
                 message="Company user not found",
@@ -878,7 +883,7 @@ async def remove_company_member(
             )
 
         # Remove the user from the company
-        success = crud_company.delete_company_user(
+        success = await crud_company.delete_company_user(
             db=db,
             company_id=company_id,
             user_id=user_id
@@ -896,7 +901,7 @@ async def remove_company_member(
         )
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to remove company member: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -908,7 +913,7 @@ async def remove_company_member(
 @router.post("/invitations", response_model=DataResponse[Invitation], status_code=status.HTTP_201_CREATED)
 async def invite_staff_member(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str = Depends(get_current_company_id),
     invitation_in: InvitationCreate,
     current_user: User = Depends(get_current_active_user),
@@ -929,14 +934,14 @@ async def invite_staff_member(
     """
     try:
         # Check if email is already registered
-        existing_user = crud_user.get_by_email(db=db, email=invitation_in.email.lower())
+        existing_user = await crud_user.get_by_email(db=db, email=invitation_in.email.lower())
         is_existing_user = existing_user is not None
 
         # Set default role to staff if not provided
         role = invitation_in.role or CompanyRoleType.staff
 
         # Create invitation
-        invitation = crud_invitation.create_invitation(
+        invitation = await crud_invitation.create_invitation(
             db=db,
             company_id=company_id,
             email=invitation_in.email.lower(),
@@ -944,7 +949,7 @@ async def invite_staff_member(
         )
 
         # Get company details for email
-        company = crud_company.get(db=db, id=company_id)
+        company = await crud_company.get(db=db, id=company_id)
         if not company:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -976,7 +981,7 @@ async def invite_staff_member(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to invite staff member: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -986,7 +991,7 @@ async def invite_staff_member(
 @router.post("/invitations/accept", response_model=DataResponse, status_code=status.HTTP_200_OK)
 async def accept_invitation(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     invitation_in: InvitationAccept,
     response: Response
 ) -> DataResponse:
@@ -1006,7 +1011,7 @@ async def accept_invitation(
     """
     try:
         # Get invitation
-        invitation = crud_invitation.get_invitation_by_token(db=db, token=invitation_in.token)
+        invitation = await crud_invitation.get_invitation_by_token(db=db, token=invitation_in.token)
 
         if not invitation:
             response.status_code = status.HTTP_404_NOT_FOUND
@@ -1016,7 +1021,7 @@ async def accept_invitation(
             )
 
         # Check if user exists
-        existing_user = crud_user.get_by_email(db=db, email=invitation.email)
+        existing_user = await crud_user.get_by_email(db=db, email=invitation.email)
 
         if not existing_user:
             # Create new user
@@ -1041,14 +1046,14 @@ async def accept_invitation(
 
             from app.schemas.schemas import UserCreate as UserCreateSchema
             user_in = UserCreateSchema(**user_create_data)
-            new_user = crud_user.create(db=db, obj_in=user_in)
+            new_user = await crud_user.create(db=db, obj_in=user_in)
             user_id = new_user.id
         else:
             # Use existing user
             user_id = existing_user.id
 
         # Accept invitation (mark as USED and add to company)
-        crud_invitation.accept_invitation(
+        await crud_invitation.accept_invitation(
             db=db,
             invitation=invitation,
             user_id=user_id
@@ -1060,7 +1065,7 @@ async def accept_invitation(
         )
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to accept invitation: {str(e)}",
@@ -1071,7 +1076,7 @@ async def accept_invitation(
 @router.post("/invitations/{token}/resend", response_model=DataResponse[Invitation])
 async def resend_invitation(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str = Depends(get_current_company_id),
     token: str,
     current_user: User = Depends(get_current_active_user),
@@ -1088,11 +1093,13 @@ async def resend_invitation(
     try:
         from app.models.models import Invitations
 
-        # Get the invitation by current token
-        invitation = db.query(Invitations).filter(
+        # Get the invitation by current token using select
+        stmt = select(Invitations).filter(
             Invitations.token == token,
             Invitations.company_id == company_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        invitation = result.scalar_one_or_none()
 
         if not invitation:
             return DataResponse.error_response(
@@ -1101,7 +1108,7 @@ async def resend_invitation(
             )
 
         # Resend invitation
-        resent_invitation = crud_invitation.resend_invitation(
+        resent_invitation = await crud_invitation.resend_invitation(
             db=db,
             company_id=company_id,
             email=invitation.email
@@ -1114,10 +1121,10 @@ async def resend_invitation(
             )
 
         # Get company details for email
-        company = crud_company.get(db=db, id=company_id)
+        company = await crud_company.get(db=db, id=company_id)
 
         # Check if user exists for email
-        existing_user = crud_user.get_by_email(db=db, email=resent_invitation.email)
+        existing_user = await crud_user.get_by_email(db=db, email=resent_invitation.email)
         is_existing_user = existing_user is not None
 
         # Send invitation email
@@ -1143,7 +1150,7 @@ async def resend_invitation(
         )
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to resend invitation: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1153,7 +1160,7 @@ async def resend_invitation(
 @router.get("/all/invitations", response_model=DataResponse[List[Invitation]])
 async def get_company_invitations(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str = Depends(get_current_company_id),
     status_filter: str = Query(None, description="Filter by status: pending, used, expired, declined"),
     current_user: User = Depends(get_current_active_user),
@@ -1174,7 +1181,7 @@ async def get_company_invitations(
         if status_filter:
             status_enum = InvitationStatus(status_filter.upper())
 
-        invitations = crud_invitation.get_company_invitations(
+        invitations = await crud_invitation.get_company_invitations(
             db=db,
             company_id=company_id,
             status=status_enum
@@ -1201,7 +1208,7 @@ async def get_company_invitations(
 @router.post("/invitations/{token}/check-and-join", response_model=DataResponse, status_code=status.HTTP_200_OK)
 async def check_invitation_and_join(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     token: str,
     response: Response
 ) -> DataResponse:
@@ -1218,7 +1225,7 @@ async def check_invitation_and_join(
     """
     try:
         # Get invitation by token
-        invitation = crud_invitation.get_invitation_by_token(db=db, token=token)
+        invitation = await crud_invitation.get_invitation_by_token(db=db, token=token)
 
         if not invitation:
             response.status_code = status.HTTP_404_NOT_FOUND
@@ -1229,7 +1236,7 @@ async def check_invitation_and_join(
             )
 
         # Check if user exists with this email
-        existing_user = crud_user.get_by_email(db=db, email=invitation.email)
+        existing_user = await crud_user.get_by_email(db=db, email=invitation.email)
 
         if not existing_user:
             # User doesn't exist - return status for UI to show signup form
@@ -1246,10 +1253,12 @@ async def check_invitation_and_join(
             )
 
         # Check if user is already a member of this company
-        existing_company_user = db.query(CompanyUsers).filter(
+        stmt = select(CompanyUsers).filter(
             CompanyUsers.user_id == existing_user.id,
             CompanyUsers.company_id == invitation.company_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        existing_company_user = result.scalar_one_or_none()
 
         if existing_company_user:
             # User already a member
@@ -1270,7 +1279,7 @@ async def check_invitation_and_join(
                 invitation.status = InvitationStatus.USED
                 invitation.updated_at = datetime.now()
                 db.add(invitation)
-                db.commit()
+                await db.commit()
 
                 return DataResponse.success_response(
                     message="User successfully joined the company",
@@ -1301,7 +1310,7 @@ async def check_invitation_and_join(
         # invitation.status = InvitationStatus.USED
         invitation.updated_at = datetime.now()
         db.add(invitation)
-        db.commit()
+        await db.commit()
 
         # User exists and has been added to company
         return DataResponse.success_response(
@@ -1320,7 +1329,7 @@ async def check_invitation_and_join(
         )
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to process invitation: {str(e)}",

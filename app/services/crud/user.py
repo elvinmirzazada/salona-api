@@ -3,7 +3,8 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 from pydantic.v1 import UUID4
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.models import CompanyUsers, CustomerStatusType
 from app.models.models import Users, UserVerifications
@@ -15,34 +16,42 @@ from app.schemas.schemas import (
 from app.core.datetime_utils import utcnow
 
 
-def get(db: Session, id: UUID4) -> Optional[Users]:
-    return db.query(Users, CompanyUsers.company_id).outerjoin(CompanyUsers, CompanyUsers.user_id == Users.id).filter(Users.id == id).first()
+async def get(db: AsyncSession, id: UUID4) -> Optional[Users]:
+    stmt = (select(Users, CompanyUsers.company_id)
+            .outerjoin(CompanyUsers, CompanyUsers.user_id == Users.id)
+            .filter(Users.id == id))
+    result = await db.execute(stmt)
+    return result.first()
 
 
-def get_all(db: Session) -> List[Users]:
-    return db.query(Users).all()
+async def get_all(db: AsyncSession) -> List[Users]:
+    stmt = select(Users)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def get_by_email(db: Session, email: str) -> Optional[Users]:
-    return db.query(Users).filter(Users.email == email).first()
+async def get_by_email(db: AsyncSession, email: str) -> Optional[Users]:
+    stmt = select(Users).filter(Users.email == email)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def create(db: Session, *, obj_in: UserCreate) -> Users:
+async def create(db: AsyncSession, *, obj_in: UserCreate) -> Users:
     db_obj = Users(**obj_in.model_dump(exclude={'availabilities'}))
     db_obj.id = str(uuid.uuid4())
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
 
-def update(db: Session, *, db_obj: Users, obj_in: UserUpdate) -> Users:
+async def update(db: AsyncSession, *, db_obj: Users, obj_in: UserUpdate) -> Users:
     """Update user information"""
     update_data = obj_in.model_dump(exclude_unset=True)
     
     # If email is being updated, check if it's already in use by another user
     if 'email' in update_data and update_data['email']:
-        existing_user = get_by_email(db, email=update_data['email'])
+        existing_user = await get_by_email(db, email=update_data['email'])
         if existing_user and existing_user.id != db_obj.id:
             raise ValueError("Email is already in use by another user")
     
@@ -53,27 +62,32 @@ def update(db: Session, *, db_obj: Users, obj_in: UserUpdate) -> Users:
     db_obj.updated_at = utcnow()
     
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
 
-def get_verification_token(db: Session, token: str, type: str) -> Optional[UserVerifications]:
+async def get_verification_token(db: AsyncSession, token: str, type: str) -> Optional[UserVerifications]:
     """Get verification token by token string and type"""
-    return db.query(UserVerifications).filter(
+    stmt = select(UserVerifications).filter(
         UserVerifications.token == token,
         UserVerifications.type == type
-    ).first()
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def verify_token(db: Session, db_obj: UserVerifications) -> bool:
+async def verify_token(db: AsyncSession, db_obj: UserVerifications) -> bool:
     """Mark verification token as verified and update user email_verified status"""
     try:
         db_obj.status = VerificationStatus.VERIFIED
         db_obj.used_at = utcnow()
 
         # Update user's email_verified status
-        user = db.query(Users).filter(Users.id == db_obj.user_id).first()
+        stmt = select(Users).filter(Users.id == db_obj.user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+
         if user:
             user.email_verified = True
             user.status = CustomerStatusType.active
@@ -81,42 +95,29 @@ def verify_token(db: Session, db_obj: UserVerifications) -> bool:
             db.add(user)
 
         db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
         return True
     except Exception:
-        db.rollback()
+        await db.rollback()
         return False
 
 
-def get_company_users(db: Session, company_id: str) -> List[CompanyUser]:
+async def get_company_users(db: AsyncSession, company_id: str) -> List[CompanyUser]:
     """
     Get all users for a company
     """
-    users = db.query(CompanyUsers).join(Users, Users.id == CompanyUsers.user_id).filter(
-        Users.status == 'active', CompanyUsers.company_id == company_id, CompanyUsers.status == 'active'
-    ).all()
-    # result = []
-    # for company_user, user in users:
-    #     result.append(CompanyUser(
-    #         user_id=company_user.user_id,
-    #         company_id=company_user.company_id,
-    #         role=company_user.role,
-    #         status=company_user.status,
-    #         user=User(
-    #             id=user.id,
-    #             first_name=user.first_name,
-    #             last_name=user.last_name,
-    #             email=user.email,
-    #             phone=user.phone,
-    #             status=user.status,
-    #             created_at=user.created_at,
-    #             updated_at=user.updated_at
-    #         )
-    #     ))
+    stmt = (select(CompanyUsers)
+            .join(Users, Users.id == CompanyUsers.user_id)
+            .filter(Users.status == 'active',
+                    CompanyUsers.company_id == company_id,
+                    CompanyUsers.status == 'active'))
+    result = await db.execute(stmt)
+    users = result.scalars().all()
     return users
 
 
-def get_company_by_user(db: Session, user_id: str) -> Optional[CompanyUsers]:
-    return db.query(CompanyUsers).filter(
-        CompanyUsers.user_id == user_id).first()
+async def get_company_by_user(db: AsyncSession, user_id: str) -> Optional[CompanyUsers]:
+    stmt = select(CompanyUsers).filter(CompanyUsers.user_id == user_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()

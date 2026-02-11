@@ -1,27 +1,31 @@
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
-# Create engine with timezone configuration
-engine = create_engine(
-    settings.get_database_url(),
-    connect_args={"options": "-c timezone=utc"} if "postgresql" in settings.get_database_url() else {}
+# Create async engine with timezone configuration
+engine = create_async_engine(
+    settings.get_async_database_url(),
+    echo=False,
+    poolclass=NullPool,  # Use NullPool for better async handling
+    connect_args={
+        "server_settings": {"timezone": "utc"}
+    }
 )
 
-# For PostgreSQL, ensure timezone is set to UTC at connection level
-@event.listens_for(engine, "connect")
-def set_timezone(dbapi_conn, connection_record):
-    """Set timezone to UTC for each new database connection"""
-    if "postgresql" in settings.get_database_url():
-        cursor = dbapi_conn.cursor()
-        cursor.execute("SET TIME ZONE 'UTC'")
-        cursor.close()
+# Create async session factory
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+async def get_db():
+    """Async database session dependency"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()

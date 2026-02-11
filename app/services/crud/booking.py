@@ -3,10 +3,11 @@ from typing import List, Optional, Any
 from datetime import date, datetime
 
 from pydantic.v1 import UUID4
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, or_, select, delete
+from sqlalchemy.orm import selectinload
 
-from app.models import BookingServices, Customers
+from app.models import BookingServices, Customers, CategoryServices
 from app.models.models import Bookings
 from app.models.enums import BookingStatus
 from app.schemas import BookingServiceRequest
@@ -17,42 +18,69 @@ from app.services.crud.company import get_company_users
 from app.core.datetime_utils import utcnow, ensure_utc
 
 
-def get(db: Session, id: UUID4) -> Optional[Bookings]:
-    return db.query(Bookings).filter(Bookings.id == id).first()
+async def get(db: AsyncSession, id: UUID4) -> Optional[Bookings]:
+    stmt = select(Bookings).filter(Bookings.id == id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def get_all(db: Session, skip: int = 0, limit: int = 100) -> list[type[Bookings]]:
-    return list(db.query(Bookings).offset(skip).limit(limit).all())
+async def get_all(db: AsyncSession, skip: int = 0, limit: int = 100) -> list[type[Bookings]]:
+    stmt = select(Bookings).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
-def get_user_bookings_in_range(db: Session, user_id: str, start_date: Any, end_date: Any) -> list["Bookings"]:
-    return list(db.query(Bookings).join(BookingServices).filter(
-        BookingServices.user_id == user_id,
-        Bookings.start_at >= start_date,
-        Bookings.end_at <= end_date
-    ).all())
 
-def get_all_bookings_in_range(db: Session, start_date: date, end_date: date):
+async def get_user_bookings_in_range(db: AsyncSession, user_id: str, start_date: Any, end_date: Any) -> list["Bookings"]:
+    stmt = (select(Bookings)
+            .join(BookingServices)
+            .filter(
+                BookingServices.user_id == user_id,
+                Bookings.start_at >= start_date,
+                Bookings.end_at <= end_date
+            ))
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+async def get_all_bookings_in_range(db: AsyncSession, start_date: date, end_date: date):
     # Join Bookings and BookingServices, return tuples of (booking, user_id)
-    return db.query(Bookings, BookingServices.user_id).join(BookingServices, Bookings.id == BookingServices.booking_id).filter(
-        Bookings.start_at >= start_date,
-        Bookings.end_at <= end_date
-    ).all()
+    stmt = (select(Bookings, BookingServices.user_id)
+            .join(BookingServices, Bookings.id == BookingServices.booking_id)
+            .filter(
+                Bookings.start_at >= start_date,
+                Bookings.end_at <= end_date
+            ))
+    result = await db.execute(stmt)
+    return result.all()
 
 
-def get_all_bookings_in_range_by_company(db: Session, company_id: str, start_date: date, end_date: date):
-    # Convert dates to UTC datetime if they aren't already
-    start_datetime = ensure_utc(datetime.combine(start_date, datetime.min.time()))
-    end_datetime = ensure_utc(datetime.combine(end_date, datetime.max.time()))
+async def get_all_bookings_in_range_by_company(db: AsyncSession, company_id: str, start_date: date, end_date: date):
+    # Convert dates to UTC datetime, then remove timezone info since DB expects naive datetime
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
 
-    return db.query(Bookings).join(BookingServices, Bookings.id == BookingServices.booking_id).filter(
-        Bookings.company_id == company_id,
-        Bookings.start_at >= start_datetime,
-        Bookings.end_at <= end_datetime,
-        Bookings.status.in_(['scheduled', 'confirmed', 'completed', 'no_show'])
-    ).all()
+    stmt = (select(Bookings)
+            .options(
+        selectinload(Bookings.booking_services)
+                    .selectinload(BookingServices.assigned_staff),
+                #
+                # selectinload(Bookings.booking_services)
+                #     .selectinload(BookingServices.category_service)
+                #     .selectinload(CategoryServices.service_staff),
+
+                selectinload(Bookings.customer)
+            )
+            .join(BookingServices, Bookings.id == BookingServices.booking_id)
+            .filter(
+                Bookings.company_id == company_id,
+                Bookings.start_at >= start_datetime,
+                Bookings.end_at <= end_datetime,
+                Bookings.status.in_(['scheduled', 'confirmed', 'completed', 'no_show', 'cancelled'])
+            ))
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def check_staff_availability(db: Session, user_id: UUID4, start_time: datetime, end_time: datetime, exclude_booking_id: Optional[UUID4] = None) -> tuple[bool, Optional[str]]:
+async def check_staff_availability(db: AsyncSession, user_id: UUID4, start_time: datetime, end_time: datetime, exclude_booking_id: Optional[UUID4] = None) -> tuple[bool, Optional[str]]:
     """
     Check if a staff member is available during the requested time period.
     
@@ -67,20 +95,23 @@ def check_staff_availability(db: Session, user_id: UUID4, start_time: datetime, 
         Tuple of (is_available: bool, conflict_message: Optional[str])
     """
     # Query for overlapping bookings for this staff member
-    query = db.query(BookingServices).join(Bookings).filter(
-        BookingServices.user_id == user_id,
-        Bookings.status.in_([BookingStatus.SCHEDULED, BookingStatus.CONFIRMED]),
-        # Check for time overlap: (start_time < existing_end AND end_time > existing_start)
-        BookingServices.start_at < end_time,
-        BookingServices.end_at > start_time
-    )
-    
+    stmt = (select(BookingServices)
+            .join(Bookings)
+            .filter(
+                BookingServices.user_id == user_id,
+                Bookings.status.in_([BookingStatus.SCHEDULED, BookingStatus.CONFIRMED]),
+                # Check for time overlap: (start_time < existing_end AND end_time > existing_start)
+                BookingServices.start_at < end_time,
+                BookingServices.end_at > start_time
+            ))
+
     # Exclude the current booking if updating
     if exclude_booking_id:
-        query = query.filter(Bookings.id != exclude_booking_id)
-    
-    conflicting_bookings = query.all()
-    
+        stmt = stmt.filter(Bookings.id != exclude_booking_id)
+
+    result = await db.execute(stmt)
+    conflicting_bookings = result.scalars().all()
+
     if conflicting_bookings:
         conflict = conflicting_bookings[0]
         conflict_message = f"Staff member is not available. There is a conflicting booking from {conflict.start_at.strftime('%H:%M')} to {conflict.end_at.strftime('%H:%M')}"
@@ -89,23 +120,23 @@ def check_staff_availability(db: Session, user_id: UUID4, start_time: datetime, 
     return True, None
 
 
-def calc_service_params(db, services: List[BookingServiceRequest], company_id: str = None) -> tuple[int, int]:
+async def calc_service_params(db: AsyncSession, services: List[BookingServiceRequest], company_id: str = None) -> tuple[int, int]:
     total_duration = 0
     total_price = 0
 
     for srv in services:
-        selected_srv = service.get_service(db, srv.category_service_id, company_id)
+        selected_srv = await service.get_service(db, srv.category_service_id, company_id)
         total_duration += selected_srv.duration
         total_price += int(selected_srv.discount_price or selected_srv.price)
 
     return total_duration, total_price
 
 
-def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
-    total_duration, total_price = calc_service_params(db, obj_in.services, obj_in.company_id)
+async def create(db: AsyncSession, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
+    total_duration, total_price = await calc_service_params(db, obj_in.services, obj_in.company_id)
 
-    # Ensure start_time is in UTC
-    start_time_utc = ensure_utc(obj_in.start_time)
+    # Convert to naive datetime (DB expects TIMESTAMP WITHOUT TIME ZONE)
+    start_time_utc = obj_in.start_time.replace(tzinfo=None) if obj_in.start_time.tzinfo else obj_in.start_time
     end_time_utc = start_time_utc + timedelta(minutes=total_duration)
 
     db_obj = Bookings(
@@ -118,13 +149,14 @@ def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Booking
         status=BookingStatus.CONFIRMED
     )
     db.add(db_obj)
-    db.commit()
+    await db.commit()
 
     current_start_time = start_time_utc
     for srv in obj_in.services:
         if not srv.user_id:
-            srv.user_id = get_company_users(db, str(obj_in.company_id))[0].user_id
-        duration, _ = calc_service_params(db, [srv], obj_in.company_id)
+            company_users = await get_company_users(db, str(obj_in.company_id))
+            srv.user_id = company_users[0].user_id
+        duration, _ = await calc_service_params(db, [srv], obj_in.company_id)
         service_end_time = current_start_time + timedelta(minutes=duration)
 
         db_service_obj = BookingServices(
@@ -138,14 +170,14 @@ def create(db: Session, *, obj_in: BookingCreate, customer_id: UUID4) -> Booking
         current_start_time = service_end_time
         db.add(db_service_obj)
 
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     # Publish booking created event
     # publish_event("booking_created", str(db_obj.id))
     return db_obj
 
 
-def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
+async def update(db: AsyncSession, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
     """
     Update a booking and its associated services.
     """
@@ -159,13 +191,15 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
     if obj_in.services is not None:
         # Update start time if provided
         if obj_in.start_time is not None:
-            db_obj.start_at = ensure_utc(obj_in.start_time)
+            # Remove timezone info for DB storage
+            db_obj.start_at = obj_in.start_time.replace(tzinfo=None) if obj_in.start_time.tzinfo else obj_in.start_time
 
         # Remove existing booking services
-        db.query(BookingServices).filter(BookingServices.booking_id == db_obj.id).delete()
+        stmt = delete(BookingServices).filter(BookingServices.booking_id == db_obj.id)
+        await db.execute(stmt)
 
         # Recalculate total duration and price
-        total_duration, total_price = calc_service_params(db, obj_in.services, str(db_obj.company_id))
+        total_duration, total_price = await calc_service_params(db, obj_in.services, str(db_obj.company_id))
         db_obj.total_price = total_price
 
         # Update end time based on new start time and duration
@@ -175,7 +209,7 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
         # Create new booking services
         current_start_time = start_time
         for srv in obj_in.services:
-            duration, _ = calc_service_params(db, [srv], str(db_obj.company_id))
+            duration, _ = await calc_service_params(db, [srv], str(db_obj.company_id))
             db_service_obj = BookingServices(
                 booking_id=db_obj.id,
                 category_service_id=srv.category_service_id,
@@ -184,36 +218,34 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
                 start_at=current_start_time,
                 end_at=current_start_time + timedelta(minutes=duration)
             )
-            current_start_time = ensure_utc(db_service_obj.end_at)
+            current_start_time = db_service_obj.end_at
             db.add(db_service_obj)
 
     # If only start_time is being updated (without services)
     elif obj_in.start_time is not None:
         # Get existing booking services
-        existing_services = db.query(BookingServices).filter(
+        stmt = select(BookingServices).filter(
             BookingServices.booking_id == db_obj.id
-        ).order_by(BookingServices.start_at).all()
+        ).order_by(BookingServices.start_at)
+        result = await db.execute(stmt)
+        existing_services = result.scalars().all()
 
-        # Ensure timezone awareness before calculating time difference
-        new_start_time = ensure_utc(obj_in.start_time)
-        old_start_time = ensure_utc(db_obj.start_at)
+        # Remove timezone info before calculating time difference
+        new_start_time = obj_in.start_time.replace(tzinfo=None) if obj_in.start_time.tzinfo else obj_in.start_time
+        old_start_time = db_obj.start_at
 
         # Calculate the time difference
         time_diff = new_start_time - old_start_time
 
         # Update booking start and end times
         db_obj.start_at = new_start_time
-        db_obj.end_at = ensure_utc(db_obj.end_at) + time_diff
+        db_obj.end_at = db_obj.end_at + time_diff
 
         # Update all existing booking services with the new times
         current_start_time = new_start_time
         for booking_service in existing_services:
-            # Ensure timezone awareness for service times
-            service_start = ensure_utc(booking_service.start_at)
-            service_end = ensure_utc(booking_service.end_at)
-
             # Calculate the duration of this service
-            service_duration = service_end - service_start
+            service_duration = booking_service.end_at - booking_service.start_at
 
             # Update the service times
             booking_service.start_at = current_start_time
@@ -223,63 +255,75 @@ def update(db: Session, *, db_obj: Bookings, obj_in: BookingUpdate) -> Bookings:
             db.add(booking_service)
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
 
-def cancel(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
+async def cancel(db: AsyncSession, *, booking_id: UUID4) -> Optional[Bookings]:
     """
     Cancel a booking by setting its status to CANCELLED.
     Returns the updated booking or None if booking not found.
     """
-    db_obj = db.query(Bookings).filter(Bookings.id == booking_id).first()
+    stmt = select(Bookings).filter(Bookings.id == booking_id)
+    result = await db.execute(stmt)
+    db_obj = result.scalar_one_or_none()
+
     if db_obj:
         db_obj.status = BookingStatus.CANCELLED
         db.add(db_obj)
-        db.flush()  # Flush to get the updated object but don't commit yet
+        await db.flush()  # Flush to get the updated object but don't commit yet
         return db_obj
     return None
 
 
-def confirm(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
+async def confirm(db: AsyncSession, *, booking_id: UUID4) -> Optional[Bookings]:
     """
     Confirm a booking by setting its status to CONFIRMED.
     Returns the updated booking or None if booking not found.
     """
-    db_obj = db.query(Bookings).filter(Bookings.id == booking_id).first()
+    stmt = select(Bookings).filter(Bookings.id == booking_id)
+    result = await db.execute(stmt)
+    db_obj = result.scalar_one_or_none()
+
     if db_obj:
         db_obj.status = BookingStatus.CONFIRMED
         db.add(db_obj)
-        db.flush()  # Flush to get the updated object but don't commit yet
+        await db.flush()  # Flush to get the updated object but don't commit yet
         return db_obj
     return None
 
 
-def complete(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
+async def complete(db: AsyncSession, *, booking_id: UUID4) -> Optional[Bookings]:
     """
     Complete a booking by setting its status to COMPLETED.
     Returns the updated booking or None if booking not found.
     """
-    db_obj = db.query(Bookings).filter(Bookings.id == booking_id).first()
+    stmt = select(Bookings).filter(Bookings.id == booking_id)
+    result = await db.execute(stmt)
+    db_obj = result.scalar_one_or_none()
+
     if db_obj:
         db_obj.status = BookingStatus.COMPLETED
         db.add(db_obj)
-        db.flush()  # Flush to get the updated object but don't commit yet
+        await db.flush()  # Flush to get the updated object but don't commit yet
         return db_obj
     return None
 
 
-def no_show(db: Session, *, booking_id: UUID4) -> Optional[Bookings]:
+async def no_show(db: AsyncSession, *, booking_id: UUID4) -> Optional[Bookings]:
     """
     Mark a booking as NO_SHOW when the customer doesn't show up.
     Returns the updated booking or None if booking not found.
     """
-    db_obj = db.query(Bookings).filter(Bookings.id == booking_id).first()
+    stmt = select(Bookings).filter(Bookings.id == booking_id)
+    result = await db.execute(stmt)
+    db_obj = result.scalar_one_or_none()
+
     if db_obj:
         db_obj.status = BookingStatus.NO_SHOW
         db.add(db_obj)
-        db.flush()  # Flush to get the updated object but don't commit yet
+        await db.flush()  # Flush to get the updated object but don't commit yet
         return db_obj
     return None
 

@@ -2,9 +2,11 @@ import uuid
 from typing import Optional, List
 from datetime import datetime, timedelta, timezone
 from pydantic import UUID4
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.models.models import Invitations, CompanyUsers
 from app.schemas.schemas import Invitation
 from app.models.enums import InvitationStatus, StatusType, CompanyRoleType
@@ -143,8 +145,8 @@ def get_invitation_by_email_and_company(
         raise
 
 
-def get_company_invitations(
-    db: Session,
+async def get_company_invitations(
+    db: AsyncSession,
     company_id: str,
     status: Optional[InvitationStatus] = None
 ) -> List[Invitations]:
@@ -160,14 +162,13 @@ def get_company_invitations(
         List[Invitations]: List of invitation records
     """
     try:
-        query = db.query(Invitations).filter(
-            Invitations.company_id == company_id, Invitations.status != 'used'
-        )
-
+        stmt = (select(Invitations)
+                .filter(Invitations.company_id == company_id))
         if status:
-            query = query.filter(Invitations.status == status)
+            stmt = stmt.filter(Invitations.status == status)
 
-        return query.all()
+        result = await db.execute(stmt)
+        return result.scalars().all()
     except SQLAlchemyError as e:
         logger.error(f"Database error while fetching invitations: {str(e)}")
         raise

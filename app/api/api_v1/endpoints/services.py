@@ -1,6 +1,6 @@
 from typing import List, Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.schemas import (CompanyCategoryWithServicesResponse, CompanyUser,
                                CompanyCategoryCreate, CompanyCategoryUpdate, CompanyCategory,
@@ -17,21 +17,21 @@ router = APIRouter()
 
 
 @router.get("/companies/{company_slug}/services", response_model=DataResponse[List[CompanyCategoryWithServicesResponse]])
-def get_company_services(
+async def get_company_services(
     company_slug: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> DataResponse:
     """
     Get service by company ID with details.
     """
-    company = crud_company.get_by_slug(db=db, slug=company_slug)
+    company = await crud_company.get_by_slug(db=db, slug=company_slug)
     if not company:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Company not found"
         )
     company_id = str(company.id)
-    services = crud_service.get_company_services(db=db, company_id=company_id)
+    services = await crud_service.get_company_services(db=db, company_id=company_id)
     if not services:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -44,21 +44,21 @@ def get_company_services(
 
 
 @router.get("/companies/{company_slug}/staff", response_model=DataResponse[List[CompanyUser]])
-def get_company_users(
+async def get_company_users(
     company_slug: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> DataResponse:
     """
     Get users by company ID with details.
     """
-    company = crud_company.get_by_slug(db=db, slug=company_slug)
+    company = await crud_company.get_by_slug(db=db, slug=company_slug)
     if not company:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Company not found"
         )
     company_id = str(company.id)
-    users = crud_user.get_company_users(db=db, company_id=company_id)
+    users = await crud_user.get_company_users(db=db, company_id=company_id)
     if not users:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -71,9 +71,9 @@ def get_company_users(
 
 
 @router.post("/categories", response_model=DataResponse[CompanyCategory], status_code=status.HTTP_201_CREATED)
-def create_category(
+async def create_category(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         category_in: CompanyCategoryCreate,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
@@ -84,7 +84,7 @@ def create_category(
     try:
         # Validate parent category if this is a subcategory
         if category_in.parent_category_id:
-            parent_category = crud_service.get_category(db=db, category_id=str(category_in.parent_category_id))
+            parent_category = await crud_service.get_category(db=db, category_id=str(category_in.parent_category_id))
             if not parent_category:
                 return DataResponse.error_response(
                     message="Parent category not found",
@@ -106,28 +106,28 @@ def create_category(
 
         # Create the category
         category_in.company_id = company_id
-        category = crud_service.create_category(db=db, obj_in=category_in)
+        category = await crud_service.create_category(db=db, obj_in=category_in)
 
         return DataResponse.success_response(
             data=category,
             message="Category created successfully"
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to create category: {str(e)}",
             data=None,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @router.get("/categories/{category_id}", response_model=DataResponse[CompanyCategory])
-def get_category(
+async def get_category(
     category_id: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> DataResponse:
     """
     Get a specific category by ID.
     """
-    category = crud_service.get_category(db=db, category_id=category_id)
+    category = await crud_service.get_category(db=db, category_id=category_id)
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -141,14 +141,14 @@ def get_category(
 
 
 @router.get("/companies/categories", response_model=DataResponse[List[CompanyCategory]])
-def get_company_categories(
-        db: Session = Depends(get_db),
+async def get_company_categories(
+        db: AsyncSession = Depends(get_db),
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Get all categories for a company (flat list).
     """
-    categories = crud_service.get_company_categories(db=db, company_id=company_id)
+    categories = await crud_service.get_company_categories(db=db, company_id=company_id)
 
     return DataResponse.success_response(
         data=categories,
@@ -157,14 +157,14 @@ def get_company_categories(
 
 
 @router.get("/companies/categories/hierarchical", response_model=DataResponse[List[CompanyCategoryHierarchical]])
-def get_company_categories_hierarchical(
-        db: Session = Depends(get_db),
+async def get_company_categories_hierarchical(
+        db: AsyncSession = Depends(get_db),
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Get all categories for a company in hierarchical structure (categories with nested subcategories).
     """
-    categories = crud_service.get_company_categories_hierarchical(db=db, company_id=company_id)
+    categories = await crud_service.get_company_categories_hierarchical(db=db, company_id=company_id)
 
     return DataResponse.success_response(
         data=categories,
@@ -173,9 +173,9 @@ def get_company_categories_hierarchical(
 
 
 @router.put("/categories/{category_id}", response_model=DataResponse[CompanyCategory])
-def update_category(
+async def update_category(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         category_id: str,
         category_in: CompanyCategoryUpdate,
         company_id: str = Depends(get_current_company_id)
@@ -184,14 +184,14 @@ def update_category(
     Update a service category.
     """
     category_in.company_id = company_id
-    category = crud_service.get_category(db=db, category_id=category_id)
+    category = await crud_service.get_category(db=db, category_id=category_id)
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Category not found"
         )
 
-    updated_category = crud_service.update_category(
+    updated_category = await crud_service.update_category(
         db=db,
         db_obj=category,
         obj_in=category_in
@@ -204,16 +204,16 @@ def update_category(
 
 
 @router.delete("/categories/{category_id}", response_model=DataResponse)
-def delete_category(
+async def delete_category(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         category_id: str,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Delete a service category.
     """
-    success = crud_service.delete_category(db=db, category_id=category_id, company_id=company_id)
+    success = await crud_service.delete_category(db=db, category_id=category_id, company_id=company_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -228,7 +228,7 @@ def delete_category(
 @router.post("", response_model=DataResponse[CategoryServiceResponse], status_code=status.HTTP_201_CREATED)
 async def create_service(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         service_in: Annotated[str, Form(...)],
         image: Annotated[UploadFile | None, File()] = None,
         company_id: str = Depends(get_current_company_id)
@@ -241,7 +241,7 @@ async def create_service(
 
         service_in = CategoryServiceCreate(**json.loads(service_in))
         # Verify that the category belongs to the company
-        category = crud_service.get_category(db=db, category_id=service_in.category_id)
+        category = await crud_service.get_category(db=db, category_id=service_in.category_id)
         if not category:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -266,7 +266,7 @@ async def create_service(
             service_in.image_url = image_url
 
         # Create the service (validation happens inside)
-        service = crud_service.create_service(db=db, obj_in=service_in)
+        service = await crud_service.create_service(db=db, obj_in=service_in)
 
         return DataResponse.success_response(
             data=service,
@@ -274,13 +274,13 @@ async def create_service(
         )
     except ValueError as e:
         # Handle validation errors (e.g., category has subcategories)
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=str(e),
             data=None,
             status_code=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to create service: {str(e)}",
             data=None,
@@ -288,15 +288,15 @@ async def create_service(
 
 
 @router.get("/services/{service_id}", response_model=DataResponse[CategoryServiceResponse])
-def get_service(
+async def get_service(
     service_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Get a specific service by ID.
     """
-    service = crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
+    service = await crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
     if not service:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -312,7 +312,7 @@ def get_service(
 @router.put("/service/{service_id}", response_model=DataResponse[CategoryServiceResponse])
 async def update_service(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         service_id: str,
         service_in: Annotated[str, Form(...)],
         image: Annotated[UploadFile | None, File()] = None,
@@ -326,7 +326,7 @@ async def update_service(
         service_in = CategoryServiceUpdate(**json.loads(service_in))
 
         # Verify the service exists and belongs to the company
-        service = crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
+        service = await crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
         if not service:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -335,7 +335,7 @@ async def update_service(
 
         # Validate new category if being changed
         if service_in.category_id and str(service_in.category_id) != str(service.category_id):
-            new_category = crud_service.get_category(db=db, category_id=str(service_in.category_id))
+            new_category = await crud_service.get_category(db=db, category_id=str(service_in.category_id))
             if not new_category:
                 return DataResponse.error_response(
                     message="Target category not found",
@@ -380,7 +380,7 @@ async def update_service(
             service_in.image_url = image_url
 
         # Update the service (validation happens inside)
-        updated_service = crud_service.update_service(
+        updated_service = await crud_service.update_service(
             db=db,
             db_obj=service,
             obj_in=service_in
@@ -392,13 +392,13 @@ async def update_service(
         )
     except ValueError as e:
         # Handle validation errors (e.g., category has subcategories)
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=str(e),
             status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return DataResponse.error_response(
             message=f"Failed to update service: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -406,16 +406,16 @@ async def update_service(
 
 
 @router.delete("/service/{service_id}", response_model=DataResponse)
-def delete_service(
+async def delete_service(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         service_id: str,
         company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
     """
     Delete a service.
     """
-    success = crud_service.delete_service(db=db, service_id=service_id, company_id=company_id)
+    success = await crud_service.delete_service(db=db, service_id=service_id, company_id=company_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -425,3 +425,39 @@ def delete_service(
     return DataResponse.success_response(
         message="Service deleted successfully"
     )
+
+
+@router.post("/service/{service_id}/copy", response_model=DataResponse[CategoryServiceResponse], status_code=status.HTTP_201_CREATED)
+async def copy_service(
+        *,
+        db: AsyncSession = Depends(get_db),
+        service_id: str,
+        company_id: str = Depends(get_current_company_id)
+) -> DataResponse:
+    """
+    Create a copy of an existing service.
+    The copied service will include all properties and staff assignments from the original service.
+    The name will have " (Copy)" appended to it.
+    """
+    try:
+        # Copy the service
+        copied_service = await crud_service.copy_service(db=db, service_id=service_id, company_id=company_id)
+
+        if not copied_service:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Service not found"
+            )
+
+        return DataResponse.success_response(
+            data=copied_service,
+            message="Service copied successfully"
+        )
+    except Exception as e:
+        await db.rollback()
+        return DataResponse.error_response(
+            message=f"Failed to copy service: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+

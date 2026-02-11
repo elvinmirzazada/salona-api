@@ -1,5 +1,5 @@
-from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, DateTime
+from sqlalchemy.orm import declarative_base, lazyload, Mapper
+from sqlalchemy import Column, DateTime, event
 from sqlalchemy.sql import func
 
 Base = declarative_base()

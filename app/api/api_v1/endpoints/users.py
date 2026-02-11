@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, Request, File, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from datetime import datetime, timedelta
 import logging
@@ -32,7 +32,7 @@ router = APIRouter()
 
 # Helper function to create a new user (reused by both signup and Google OAuth)
 async def _create_new_user(
-    db: Session,
+    db: AsyncSession,
     user_in: UserCreate,
     send_verification_email: bool = True
 ) -> tuple[Users, str]:
@@ -45,16 +45,16 @@ async def _create_new_user(
     user_in.email = user_in.email.lower()
 
     # Check if user already exists
-    existing_user = crud_user.get_by_email(db=db, email=user_in.email)
+    existing_user = await crud_user.get_by_email(db=db, email=user_in.email)
     if existing_user:
         raise ValueError("User with this email already exists")
 
     # Hash password
     user_in.password = hash_password(user_in.password)
-    new_user = crud_user.create(db=db, obj_in=user_in)
+    new_user = await crud_user.create(db=db, obj_in=user_in)
 
     # Create verification token
-    verification_record = create_verification_token(
+    verification_record = await create_verification_token(
         db=db,
         entity_id=new_user.id,
         verification_type=VerificationType.EMAIL,
@@ -72,7 +72,7 @@ async def _create_new_user(
                 user_name=user_name
             )
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             logger.error(f"Error sending verification email: {str(e)}")
             email_sent = False
 
@@ -82,7 +82,7 @@ async def _create_new_user(
         message = "User created successfully. Please check your email to verify your account."
     else:
         # Auto-verify email for OAuth users
-        crud_user.verify_token(db=db, db_obj=verification_record)
+        await crud_user.verify_token(db=db, db_obj=verification_record)
         message = "User created successfully via Google OAuth"
 
     return new_user, message
@@ -91,7 +91,7 @@ async def _create_new_user(
 @router.post("/auth/signup", response_model=ResponseMessage, status_code=status.HTTP_201_CREATED)
 async def create_user(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     response: Response,
     user_in: UserCreate
 ) -> ResponseMessage:
@@ -107,7 +107,7 @@ async def create_user(
         response.status_code = status.HTTP_400_BAD_REQUEST
         return ResponseMessage(message=str(e), status="error")
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return ResponseMessage(message=f"Internal server error: {str(e)}", status="error")
 
@@ -115,7 +115,7 @@ async def create_user(
 @router.post("/auth/verify-email", response_model=DataResponse)
 async def verify_email(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     verification_in: VerificationRequest,
     response: Response
 ) -> DataResponse:
@@ -123,7 +123,7 @@ async def verify_email(
     Verify user email with token.
     """
     try:
-        token = crud_user.get_verification_token(
+        token = await crud_user.get_verification_token(
             db=db,
             token=verification_in.token,
             type=VerificationType.EMAIL
@@ -143,7 +143,7 @@ async def verify_email(
                 message="Token has expired or is invalid"
             )
 
-        result = crud_user.verify_token(db=db, db_obj=token)
+        result = await crud_user.verify_token(db=db, db_obj=token)
         if result:
             return DataResponse.success_response(
                 message="Email verified successfully"
@@ -167,14 +167,14 @@ async def verify_email(
 async def user_login(
     login_data: LoginRequest,
     response: Response,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> DataResponse:
     """
     Login professional using mobile number or email and return JWT tokens.
     """
 
     # Try to get professional by mobile number first
-    user = crud_user.get_by_email(db, email=login_data.email)
+    user = await crud_user.get_by_email(db, email=login_data.email)
 
     if not user:
         raise HTTPException(
@@ -188,7 +188,7 @@ async def user_login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
-    company = crud_user.get_company_by_user(db, user.id)
+    company = await crud_user.get_company_by_user(db, user.id)
 
     # Create token pair
     tokens = create_token_pair(user.id, user.email, actor="user", ver="1", company_id=str(company.company_id) if company else '')
@@ -250,7 +250,7 @@ async def logout_user(response: Response):
 @router.get("/me", response_model=DataResponse)
 async def get_current_user(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: Users = Depends(get_current_active_user)
 ) -> DataResponse:
     """
@@ -260,8 +260,8 @@ async def get_current_user(
     if current_user.company_id:
         try:
             # Get company user details
-            company_user = crud_company.get_company_user(
-                db=db, 
+            company_user = await crud_company.get_company_user(
+                db=db,
                 user_id=str(current_user.id), 
                 company_id=str(current_user.company_id)
             )
@@ -279,7 +279,7 @@ async def get_current_user(
 @router.put("/me", response_model=DataResponse[User], status_code=status.HTTP_200_OK)
 async def update_current_user(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user_in: UserUpdate,
     response: Response,
     current_user: Users = Depends(get_current_active_user)
@@ -289,7 +289,7 @@ async def update_current_user(
     """
     try:
         # Update the user
-        updated_user = crud_user.update(
+        updated_user = await crud_user.update(
             db=db,
             db_obj=current_user,
             obj_in=user_in
@@ -310,7 +310,7 @@ async def update_current_user(
             status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to update user information: {str(e)}",
@@ -321,7 +321,7 @@ async def update_current_user(
 @router.post("/time-offs", response_model=DataResponse[TimeOff], status_code=status.HTTP_201_CREATED)
 async def create_time_off(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     time_off_in: TimeOffCreate,
     response: Response,
     company_id: str = Depends(get_current_company_id)
@@ -331,7 +331,7 @@ async def create_time_off(
     """
     try:
         # Check for overlapping time offs
-        has_overlap = crud_time_off.check_overlapping_time_offs(
+        has_overlap = await crud_time_off.check_overlapping_time_offs(
             db=db,
             user_id=time_off_in.user_id,
             start_date=time_off_in.start_date,
@@ -346,7 +346,7 @@ async def create_time_off(
             )
 
         # Create the time off
-        time_off = crud_time_off.create(
+        time_off = await crud_time_off.create(
             db=db,
             obj_in=time_off_in,
             company_id=company_id
@@ -374,7 +374,7 @@ async def create_time_off(
 @router.get("/time-offs", response_model=DataResponse[List[TimeOff]], status_code=status.HTTP_200_OK)
 async def get_all_user_time_offs(
     *,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     start_date: datetime = Query(datetime.today(), description="Filter time offs that end after this date"),
     availability_type: AvailabilityType = Query(AvailabilityType.WEEKLY, description="Type of availability check: daily, weekly, or monthly"),
     response: Response,
@@ -388,7 +388,8 @@ async def get_all_user_time_offs(
                 days=1 if availability_type == AvailabilityType.DAILY else
                      7 if availability_type == AvailabilityType.WEEKLY else 31
             )
-        time_offs = crud_time_off.get_user_time_offs(
+
+        time_offs = await crud_time_off.get_user_time_offs(
             db=db,
             company_id=company_id,
             start_date=start_date,
@@ -400,9 +401,10 @@ async def get_all_user_time_offs(
             status_code=status.HTTP_200_OK
         )
     except Exception as e:
+        print(str(e))
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
-            message=f"Failed to retrieve time offs: {str(e)}",
+            message=f"Failed to retrieve time offs",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -411,7 +413,7 @@ async def get_all_user_time_offs(
 async def update_time_off(
     *,
     time_off_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     time_off_in: TimeOffUpdate,
     response: Response,
     current_user: User = Depends(get_current_active_user)
@@ -421,7 +423,7 @@ async def update_time_off(
     """
     try:
         # Get the time off by ID
-        time_off = crud_time_off.get(db=db, time_off_id=time_off_id)
+        time_off = await crud_time_off.get(db=db, time_off_id=time_off_id)
         if not time_off:
             response.status_code = status.HTTP_404_NOT_FOUND
             return DataResponse.error_response(
@@ -442,7 +444,7 @@ async def update_time_off(
         end_date = time_off_in.end_date if time_off_in.end_date is not None else time_off.end_date
 
         # Check for overlapping time offs
-        has_overlap = crud_time_off.check_overlapping_time_offs(
+        has_overlap = await crud_time_off.check_overlapping_time_offs(
             db=db,
             user_id=current_user.id,
             start_date=start_date,
@@ -458,7 +460,7 @@ async def update_time_off(
             )
 
         # Update the time off
-        updated_time_off = crud_time_off.update(
+        updated_time_off = await crud_time_off.update(
             db=db,
             db_obj=time_off,
             obj_in=time_off_in
@@ -487,7 +489,7 @@ async def update_time_off(
 async def delete_time_off(
     *,
     time_off_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     response: Response,
     company_id: str = Depends(get_current_company_id)
 ) -> DataResponse:
@@ -495,7 +497,7 @@ async def delete_time_off(
     Delete a time off period.
     """
     # Get the time off by ID
-    time_off = crud_time_off.get(db=db, time_off_id=time_off_id)
+    time_off = await crud_time_off.get(db=db, time_off_id=time_off_id)
     if not time_off:
         response.status_code = status.HTTP_404_NOT_FOUND
         return DataResponse.error_response(
@@ -504,7 +506,7 @@ async def delete_time_off(
         )
 
     # Delete the time off
-    deleted = crud_time_off.delete(db=db, time_off_id=time_off_id)
+    deleted = await crud_time_off.delete(db=db, time_off_id=time_off_id)
     if not deleted:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
@@ -522,7 +524,7 @@ async def delete_time_off(
 async def refresh_token(
     request: Request,
     response: Response,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> DataResponse:
     """
     Refresh access and refresh tokens using the refresh token cookie.
@@ -682,7 +684,7 @@ async def google_callback(
     response: Response,
     state: str = Query(..., description="State token for CSRF protection"),
     code: str = Query(..., description="Authorization code from Google"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> DataResponse:
     """
     Handle Google OAuth callback for both signup and login.
@@ -737,11 +739,11 @@ async def google_callback(
                 detail=error
             )
         # Check if user already exists
-        user = crud_user.get_by_email(db=db, email=google_email)
+        user = await crud_user.get_by_email(db=db, email=google_email)
 
         if user:
             # User exists - authenticate them
-            company = crud_user.get_company_by_user(db, user.id)
+            company = await crud_user.get_company_by_user(db, user.id)
             tokens = create_token_pair(
                 user.id,
                 user.email,
@@ -815,7 +817,7 @@ async def google_callback(
 @router.post("/me/profile-photo", response_model=DataResponse[dict])
 async def upload_profile_photo(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         file: UploadFile = File(...),
         current_user: Users = Depends(get_current_active_user)
 ) -> DataResponse:
@@ -846,7 +848,7 @@ async def upload_profile_photo(
         )
 
         # Update user record
-        _ = crud_user.update(
+        _ = await crud_user.update(
             db=db,
             db_obj=current_user,
             obj_in=UserUpdate(profile_photo_url=photo_url)
@@ -866,13 +868,13 @@ async def upload_profile_photo(
 @router.delete("/me/profile-photo", response_model=DataResponse)
 async def delete_profile_photo(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         current_user: Users = Depends(get_current_active_user)
 ) -> DataResponse:
     """Upload profile photo to S3 and update user record."""
     try:
         # Update user record
-        _ = crud_user.update(
+        _ = await crud_user.update(
             db=db,
             db_obj=current_user,
             obj_in=UserUpdate(profile_photo_url=None)

@@ -1,8 +1,9 @@
 from typing import Optional, Dict, List
 from collections import defaultdict
 from pydantic.v1 import UUID4
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, delete
+from sqlalchemy.orm import selectinload
 
 from app.models.models import CategoryServices, CompanyCategories, ServiceStaff, Users
 from app.schemas import CategoryServiceResponse, CompanyCategoryCreate, CompanyCategoryUpdate, CategoryServiceCreate, \
@@ -32,28 +33,32 @@ from app.schemas.schemas import CompanyCategoryWithServicesResponse
 #         return db_obj
 
 
-def get_service(db: Session, service_id: str, company_id: str) -> Optional[CategoryServices]:
+async def get_service(db: AsyncSession, service_id: str, company_id: str) -> Optional[CategoryServices]:
     """
     Get all services for a company grouped by category
     Returns a dictionary where keys are categories and values are lists of services
     """
-    service = (db.query(CategoryServices)
-                .join(CompanyCategories, CategoryServices.category_id==CompanyCategories.id).filter(
-                CompanyCategories.company_id == company_id, CategoryServices.id == service_id
-    ).one_or_none())
+    stmt = (select(CategoryServices)
+            .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
+            .filter(CompanyCategories.company_id == company_id, CategoryServices.id == service_id))
+
+    result = await db.execute(stmt)
+    service = result.scalar_one_or_none()
 
     return service
 
 
-def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWithServicesResponse]:
+async def get_company_services(db: AsyncSession, company_id: str) -> List[CompanyCategoryWithServicesResponse]:
     """
     Get all services for a company grouped by category with assigned staff in hierarchical structure
     Returns categories with their services and subcategories
     """
     # Get all categories and services for the company
-    all_categories = db.query(CompanyCategories).filter(
-        CompanyCategories.company_id == company_id
-    ).all()
+    stmt = (select(CompanyCategories)
+            .options(selectinload(CompanyCategories.category_service))
+            .filter(CompanyCategories.company_id == company_id))
+    result = await db.execute(stmt)
+    all_categories = result.scalars().all()
 
     # Build a dictionary for quick lookup
     category_dict = {}
@@ -65,14 +70,15 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
         }
 
     # Get all services for the company
-    services = (db.query(CategoryServices, CompanyCategories)
-                .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
-                .filter(CompanyCategories.company_id == company_id)
-                .all())
+    stmt = (select(CategoryServices, CompanyCategories)
+            .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
+            .filter(CompanyCategories.company_id == company_id))
+    result = await db.execute(stmt)
+    services = result.all()
 
     # Map services to their categories
     for service, category in services:
-        staff_members = get_service_staff(db, service.id)
+        staff_members = await get_service_staff(db, service.id)
         service_response = CategoryServiceResponse(
             id=service.id,
             name=service.name,
@@ -115,22 +121,24 @@ def get_company_services(db: Session, company_id: str) -> List[CompanyCategoryWi
         )
 
     # Get root categories (no parent) and build hierarchy
-    result = []
+    result_list = []
     for cat_id, cat_data in category_dict.items():
         if cat_data['category'].parent_category_id is None:
-            result.append(build_category_hierarchy(cat_data))
+            result_list.append(build_category_hierarchy(cat_data))
 
-    return result
+    return result_list
 
 
-def get_category(db: Session, category_id: str) -> Optional[CompanyCategories]:
+async def get_category(db: AsyncSession, category_id: str) -> Optional[CompanyCategories]:
     """
     Get a specific category by ID
     """
-    return db.query(CompanyCategories).filter(CompanyCategories.id == category_id).first()
+    stmt = select(CompanyCategories).filter(CompanyCategories.id == category_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def create_category(db: Session, obj_in: CompanyCategoryCreate) -> CompanyCategories:
+async def create_category(db: AsyncSession, obj_in: CompanyCategoryCreate) -> CompanyCategories:
     """
     Create a new company category
     """
@@ -147,12 +155,12 @@ def create_category(db: Session, obj_in: CompanyCategoryCreate) -> CompanyCatego
     )
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
 
-def update_category(db: Session, db_obj: CompanyCategories, obj_in: CompanyCategoryUpdate) -> CompanyCategories:
+async def update_category(db: AsyncSession, db_obj: CompanyCategories, obj_in: CompanyCategoryUpdate) -> CompanyCategories:
     """
     Update an existing company category
     """
@@ -161,32 +169,42 @@ def update_category(db: Session, db_obj: CompanyCategories, obj_in: CompanyCateg
         setattr(db_obj, field, value)
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
 
-def delete_category(db: Session, category_id: str, company_id: str) -> bool:
+async def delete_category(db: AsyncSession, category_id: str, company_id: str) -> bool:
     """
     Delete a company category
     """
-    db_obj = db.query(CompanyCategories).filter(CompanyCategories.id == category_id, CompanyCategories.company_id==company_id).first()
+    stmt = select(CompanyCategories).filter(
+        CompanyCategories.id == category_id,
+        CompanyCategories.company_id == company_id
+    )
+    result = await db.execute(stmt)
+    db_obj = result.scalar_one_or_none()
+
     if not db_obj:
         return False
 
-    db.delete(db_obj)
-    db.commit()
+    await db.delete(db_obj)
+    await db.commit()
     return True
 
 
-def get_company_categories(db: Session, company_id: str) -> List[CompanyCategories]:
+async def get_company_categories(db: AsyncSession, company_id: str) -> List[CompanyCategories]:
     """
     Get all categories for a specific company with services count
     """
-    return db.query(CompanyCategories).filter(CompanyCategories.company_id == company_id).all()
+    stmt = (select(CompanyCategories)
+            .options(selectinload(CompanyCategories.category_service))
+            .filter(CompanyCategories.company_id == company_id))
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def get_company_categories_hierarchical(db: Session, company_id: str):
+async def get_company_categories_hierarchical(db: AsyncSession, company_id: str):
     """
     Get all categories for a company in hierarchical structure (parent categories with their subcategories)
     Returns only root categories (those without parent_category_id) with nested subcategories
@@ -194,9 +212,9 @@ def get_company_categories_hierarchical(db: Session, company_id: str):
     from app.schemas.schemas import CompanyCategoryHierarchical
 
     # Get all categories for the company
-    all_categories = db.query(CompanyCategories).filter(
-        CompanyCategories.company_id == company_id
-    ).all()
+    stmt = select(CompanyCategories).filter(CompanyCategories.company_id == company_id)
+    result = await db.execute(stmt)
+    all_categories = result.scalars().all()
 
     # Build a dictionary for quick lookup
     category_dict = {str(cat.id): cat for cat in all_categories}
@@ -232,17 +250,19 @@ def get_company_categories_hierarchical(db: Session, company_id: str):
     return [build_hierarchy(cat) for cat in root_categories]
 
 
-def category_has_subcategories(db: Session, category_id: str) -> bool:
+async def category_has_subcategories(db: AsyncSession, category_id: str) -> bool:
     """
     Check if a category has any subcategories
     """
-    count = db.query(CompanyCategories).filter(
+    stmt = select(func.count()).select_from(CompanyCategories).filter(
         CompanyCategories.parent_category_id == category_id
-    ).count()
+    )
+    result = await db.execute(stmt)
+    count = result.scalar()
     return count > 0
 
 
-def validate_service_category(db: Session, category_id: str) -> tuple[bool, str]:
+async def validate_service_category(db: AsyncSession, category_id: str) -> tuple[bool, str]:
     """
     Validate if services can be added to this category.
     Returns (is_valid, error_message)
@@ -250,23 +270,23 @@ def validate_service_category(db: Session, category_id: str) -> tuple[bool, str]
     Rules:
     - Services can only be added to categories that don't have subcategories
     """
-    category = get_category(db, category_id)
+    category = await get_category(db, category_id)
     if not category:
         return False, "Category not found"
 
-    if category_has_subcategories(db, category_id):
+    if await category_has_subcategories(db, category_id):
         return False, "Cannot add services to a category that has subcategories. Please add services to the subcategories instead."
 
     return True, ""
 
 
-def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServices:
+async def create_service(db: AsyncSession, obj_in: CategoryServiceCreate) -> CategoryServices:
     """
     Create a new service within a category
     Validates that the category doesn't have subcategories
     """
     # Validate category before creating service
-    is_valid, error_msg = validate_service_category(db, str(obj_in.category_id))
+    is_valid, error_msg = await validate_service_category(db, str(obj_in.category_id))
     if not is_valid:
         raise ValueError(error_msg)
 
@@ -289,24 +309,24 @@ def create_service(db: Session, obj_in: CategoryServiceCreate) -> CategoryServic
     )
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
 
     # Assign staff members to the service
     if obj_in.staff_ids:
-        assign_staff_to_service(db, db_obj.id, obj_in.staff_ids)
+        await assign_staff_to_service(db, db_obj.id, obj_in.staff_ids)
 
     return db_obj
 
 
-def update_service(db: Session, db_obj: CategoryServices, obj_in: CategoryServiceUpdate) -> CategoryServices:
+async def update_service(db: AsyncSession, db_obj: CategoryServices, obj_in: CategoryServiceUpdate) -> CategoryServices:
     """
     Update an existing service
     Validates category if being changed
     """
     # Validate new category if provided
     if obj_in.category_id and str(obj_in.category_id) != str(db_obj.category_id):
-        is_valid, error_msg = validate_service_category(db, str(obj_in.category_id))
+        is_valid, error_msg = await validate_service_category(db, str(obj_in.category_id))
         if not is_valid:
             raise ValueError(error_msg)
 
@@ -331,32 +351,35 @@ def update_service(db: Session, db_obj: CategoryServices, obj_in: CategoryServic
         setattr(db_obj, field, value)
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
 
     # Update staff assignments if provided
     if staff_ids is not None:
         # Remove existing assignments
-        db.query(ServiceStaff).filter(ServiceStaff.service_id == db_obj.id).delete()
-        db.commit()
+        stmt = delete(ServiceStaff).filter(ServiceStaff.service_id == db_obj.id)
+        await db.execute(stmt)
+        await db.commit()
 
         # Add new assignments
         if staff_ids:
-            assign_staff_to_service(db, db_obj.id, staff_ids)
+            await assign_staff_to_service(db, db_obj.id, staff_ids)
 
     return db_obj
 
 
-def assign_staff_to_service(db: Session, service_id: UUID4, staff_ids: List[UUID4]) -> None:
+async def assign_staff_to_service(db: AsyncSession, service_id: UUID4, staff_ids: List[UUID4]) -> None:
     """
     Assign multiple staff members to a service
     """
     for staff_id in staff_ids:
         # Check if assignment already exists
-        existing = db.query(ServiceStaff).filter(
+        stmt = select(ServiceStaff).filter(
             ServiceStaff.service_id == service_id,
             ServiceStaff.user_id == staff_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        existing = result.scalar_one_or_none()
 
         if not existing:
             staff_assignment = ServiceStaff(
@@ -365,36 +388,84 @@ def assign_staff_to_service(db: Session, service_id: UUID4, staff_ids: List[UUID
             )
             db.add(staff_assignment)
 
-    db.commit()
+    await db.commit()
 
 
-def get_service_staff(db: Session, service_id: UUID4) -> List[ServiceStaff]:
+async def get_service_staff(db: AsyncSession, service_id: UUID4) -> List[ServiceStaff]:
     """
     Get all staff members assigned to a service
     """
-    staff = (db.query(ServiceStaff)
-             .filter(ServiceStaff.service_id == service_id)
-             .all())
+    stmt = (select(ServiceStaff)
+            .options(selectinload(ServiceStaff.user))
+            .filter(ServiceStaff.service_id == service_id))
+    result = await db.execute(stmt)
+    staff = result.scalars().all()
     return staff
 
 
-def remove_staff_from_service(db: Session, service_id: UUID4, staff_id: UUID4) -> bool:
+async def remove_staff_from_service(db: AsyncSession, service_id: UUID4, staff_id: UUID4) -> bool:
     """
     Remove a staff member from a service
     """
-    assignment = db.query(ServiceStaff).filter(
+    stmt = select(ServiceStaff).filter(
         ServiceStaff.service_id == service_id,
         ServiceStaff.user_id == staff_id
-    ).first()
+    )
+    result = await db.execute(stmt)
+    assignment = result.scalar_one_or_none()
 
     if assignment:
-        db.delete(assignment)
-        db.commit()
+        await db.delete(assignment)
+        await db.commit()
         return True
     return False
 
 
-def delete_service(db: Session, service_id: UUID4, company_id: Optional[UUID4] = None) -> bool:
+async def copy_service(db: AsyncSession, service_id: str, company_id: str) -> Optional[CategoryServices]:
+    """
+    Create a copy of an existing service with all its properties and staff assignments.
+    The copied service will have " (Copy)" appended to its name.
+    """
+    # Get the original service
+    original_service = await get_service(db=db, service_id=service_id, company_id=company_id)
+    if not original_service:
+        return None
+
+    # Get staff assignments for the original service
+    staff_assignments = await get_service_staff(db=db, service_id=original_service.id)
+    staff_ids = [assignment.user_id for assignment in staff_assignments]
+
+    # Create a new service with copied data
+    new_service = CategoryServices(
+        category_id=original_service.category_id,
+        name=f"{original_service.name} (Copy)" if original_service.name else None,
+        name_en=f"{original_service.name_en} (Copy)" if original_service.name_en else None,
+        name_ee=f"{original_service.name_ee} (Copy)" if original_service.name_ee else None,
+        name_ru=f"{original_service.name_ru} (Copy)" if original_service.name_ru else None,
+        duration=original_service.duration,
+        price=original_service.price,
+        discount_price=original_service.discount_price,
+        additional_info_ee=original_service.additional_info_ee,
+        additional_info_en=original_service.additional_info_en,
+        additional_info_ru=original_service.additional_info_ru,
+        status=original_service.status,
+        buffer_before=original_service.buffer_before,
+        buffer_after=original_service.buffer_after,
+        image_url=original_service.image_url  # Copy the same image URL
+    )
+
+    db.add(new_service)
+    await db.commit()
+    await db.refresh(new_service)
+
+    # Copy staff assignments
+    if staff_ids:
+        await assign_staff_to_service(db, new_service.id, staff_ids)
+
+    return new_service
+
+
+async def delete_service(db: AsyncSession, service_id: UUID4, company_id: Optional[UUID4] = None) -> bool:
     """
     Delete a service and any staff assignments tied to it.
 
@@ -406,20 +477,24 @@ def delete_service(db: Session, service_id: UUID4, company_id: Optional[UUID4] =
     """
     # If company_id is provided, ensure the service belongs to that company
     if company_id:
-        service = (db.query(CategoryServices)
-                   .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
-                   .filter(CategoryServices.id == service_id, CompanyCategories.company_id == company_id)
-                   .one_or_none())
+        stmt = (select(CategoryServices)
+                .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
+                .filter(CategoryServices.id == service_id, CompanyCategories.company_id == company_id))
+        result = await db.execute(stmt)
+        service = result.scalar_one_or_none()
     else:
-        service = db.query(CategoryServices).filter(CategoryServices.id == service_id).one_or_none()
+        stmt = select(CategoryServices).filter(CategoryServices.id == service_id)
+        result = await db.execute(stmt)
+        service = result.scalar_one_or_none()
 
     if not service:
         return False
 
     # Remove any ServiceStaff assignments for this service
-    db.query(ServiceStaff).filter(ServiceStaff.service_id == service_id).delete(synchronize_session=False)
+    stmt = delete(ServiceStaff).filter(ServiceStaff.service_id == service_id)
+    await db.execute(stmt)
 
     # Delete the service itself
-    db.delete(service)
-    db.commit()
+    await db.delete(service)
+    await db.commit()
     return True

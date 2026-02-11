@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from mailersend import MailerSendClient, EmailBuilder
 from icalendar import Calendar, Event as ICalEvent
 
@@ -1251,8 +1251,8 @@ class EmailService:
         return cal.to_ical()
 
 
-def create_verification_token(
-    db: Session,
+async def create_verification_token(
+    db: AsyncSession,
     entity_id: str,
     verification_type: VerificationType,
     entity_type: str = "user",
@@ -1294,9 +1294,9 @@ def create_verification_token(
         )
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
-    
+    await db.commit()
+    await db.refresh(db_obj)
+
     return db_obj
 
 

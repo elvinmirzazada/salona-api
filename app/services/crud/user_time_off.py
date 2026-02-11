@@ -2,8 +2,10 @@ from typing import List, Optional, Any
 from datetime import date, datetime
 import uuid
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from pydantic.v1 import UUID4
+from sqlalchemy.orm import selectinload
 
 from app.models import CompanyUsers
 from app.models.models import UserTimeOffs
@@ -11,8 +13,8 @@ from app.schemas.schemas import TimeOffCreate, TimeOffUpdate
 from app.core.datetime_utils import utcnow, ensure_utc
 
 
-def get_user_time_offs(
-    db: Session,
+async def get_user_time_offs(
+    db: AsyncSession,
     company_id: str,
     start_date: datetime = None,
     end_date: datetime = None
@@ -20,30 +22,35 @@ def get_user_time_offs(
     """
     Get all time-offs for a user with optional date filtering
     """
-    query = (db.query(UserTimeOffs).join(CompanyUsers, CompanyUsers.user_id == UserTimeOffs.user_id)
-             .filter(CompanyUsers.company_id == company_id))
-    
+    stmt = (select(UserTimeOffs)
+            .options(selectinload(UserTimeOffs.user))
+            .join(CompanyUsers, CompanyUsers.user_id == UserTimeOffs.user_id)
+            .filter(CompanyUsers.company_id == company_id))
+
     if start_date and end_date:
         # Ensure dates are in UTC
-        start_date_utc = ensure_utc(start_date)
-        end_date_utc = ensure_utc(end_date)
+        start_date_utc = datetime.combine(start_date, datetime.min.time())
+        end_date_utc = datetime.combine(end_date, datetime.max.time())
         # Get time offs that overlap with the given date range
-        query = query.filter(
+        stmt = stmt.filter(
             UserTimeOffs.start_date <= end_date_utc,
             UserTimeOffs.end_date >= start_date_utc
         )
     
-    return query.all()
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def get(db: Session, time_off_id: UUID4) -> Optional[UserTimeOffs]:
+async def get(db: AsyncSession, time_off_id: UUID4) -> Optional[UserTimeOffs]:
     """
     Get a specific time off by ID
     """
-    return db.query(UserTimeOffs).filter(UserTimeOffs.id == time_off_id).first()
+    stmt = select(UserTimeOffs).filter(UserTimeOffs.id == time_off_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def create(db: Session, *, obj_in: TimeOffCreate, company_id: Optional[str]) -> UserTimeOffs:
+async def create(db: AsyncSession, *, obj_in: TimeOffCreate, company_id: Optional[str]) -> UserTimeOffs:
     """
     Create a new time off period for a user
 
@@ -56,10 +63,12 @@ def create(db: Session, *, obj_in: TimeOffCreate, company_id: Optional[str]) -> 
     end_date_utc = ensure_utc(obj_in.end_date)
     # Check if company_id is provided, validate user belongs to this company
     if company_id:
-        company_user = db.query(CompanyUsers).filter(
+        stmt = select(CompanyUsers).filter(
             CompanyUsers.user_id == obj_in.user_id,
             CompanyUsers.company_id == company_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        company_user = result.scalar_one_or_none()
 
         if not company_user:
             raise ValueError(f"User {obj_in.user_id} does not belong to company {obj_in.company_id}")
@@ -73,11 +82,12 @@ def create(db: Session, *, obj_in: TimeOffCreate, company_id: Optional[str]) -> 
 
     )
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
-def update(db: Session, *, db_obj: UserTimeOffs, obj_in: TimeOffUpdate) -> UserTimeOffs:
+
+async def update(db: AsyncSession, *, db_obj: UserTimeOffs, obj_in: TimeOffUpdate) -> UserTimeOffs:
     """
     Update an existing time off period
     """
@@ -97,26 +107,30 @@ def update(db: Session, *, db_obj: UserTimeOffs, obj_in: TimeOffUpdate) -> UserT
     db_obj.updated_at = utcnow()
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
-def delete(db: Session, *, time_off_id: UUID4) -> bool:
+
+async def delete(db: AsyncSession, *, time_off_id: UUID4) -> bool:
     """
     Delete a time off period
     """
-    db_obj = db.query(UserTimeOffs).filter(UserTimeOffs.id == time_off_id).first()
+    stmt = select(UserTimeOffs).filter(UserTimeOffs.id == time_off_id)
+    result = await db.execute(stmt)
+    db_obj = result.scalar_one_or_none()
+
     if not db_obj:
         return False
     
-    db.delete(db_obj)
-    db.commit()
+    await db.delete(db_obj)
+    await db.commit()
     return True
 
 
-def check_overlapping_time_offs(
-    db: Session, 
-    user_id: UUID4, 
+async def check_overlapping_time_offs(
+    db: AsyncSession,
+    user_id: UUID4,
     start_date: datetime,
     end_date: datetime,
     exclude_id: UUID4 = None
@@ -125,7 +139,7 @@ def check_overlapping_time_offs(
     Check if a new time off period overlaps with existing ones
     Returns True if there are overlaps, False otherwise
     """
-    query = db.query(UserTimeOffs).filter(
+    stmt = select(UserTimeOffs).filter(
         UserTimeOffs.user_id == user_id,
         UserTimeOffs.start_date <= end_date,
         UserTimeOffs.end_date >= start_date
@@ -133,9 +147,12 @@ def check_overlapping_time_offs(
 
     # Exclude the current time off if updating
     if exclude_id:
-        query = query.filter(UserTimeOffs.id != exclude_id)
+        stmt = stmt.filter(UserTimeOffs.id != exclude_id)
 
-    return query.count() > 0
+    result = await db.execute(stmt)
+    count = len(result.scalars().all())
+    return count > 0
+
 
 
 # def get_company_user_time_offs(
