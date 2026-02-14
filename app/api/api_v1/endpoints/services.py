@@ -225,7 +225,7 @@ async def delete_category(
     )
 
 
-@router.post("", response_model=DataResponse[CategoryServiceResponse], status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=DataResponse, status_code=status.HTTP_201_CREATED)
 async def create_service(
         *,
         db: AsyncSession = Depends(get_db),
@@ -269,7 +269,7 @@ async def create_service(
         service = await crud_service.create_service(db=db, obj_in=service_in)
 
         return DataResponse.success_response(
-            data=service,
+            data=None,
             message="Service created successfully"
         )
     except ValueError as e:
@@ -309,7 +309,7 @@ async def get_service(
     )
 
 
-@router.put("/service/{service_id}", response_model=DataResponse[CategoryServiceResponse])
+@router.put("/service/{service_id}", response_model=DataResponse)
 async def update_service(
         *,
         db: AsyncSession = Depends(get_db),
@@ -387,7 +387,7 @@ async def update_service(
         )
 
         return DataResponse.success_response(
-            data=updated_service,
+            data=None,
             message="Service updated successfully"
         )
     except ValueError as e:
@@ -427,7 +427,7 @@ async def delete_service(
     )
 
 
-@router.post("/service/{service_id}/copy", response_model=DataResponse[CategoryServiceResponse], status_code=status.HTTP_201_CREATED)
+@router.post("/service/{service_id}/copy", response_model=DataResponse, status_code=status.HTTP_201_CREATED)
 async def copy_service(
         *,
         db: AsyncSession = Depends(get_db),
@@ -450,7 +450,7 @@ async def copy_service(
             )
 
         return DataResponse.success_response(
-            data=copied_service,
+            data=None,
             message="Service copied successfully"
         )
     except Exception as e:

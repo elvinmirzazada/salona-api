@@ -39,6 +39,8 @@ async def get_service(db: AsyncSession, service_id: str, company_id: str) -> Opt
     Returns a dictionary where keys are categories and values are lists of services
     """
     stmt = (select(CategoryServices)
+            .options(selectinload(CategoryServices.service_staff))
+            .options(selectinload(CategoryServices.company_category))
             .join(CompanyCategories, CategoryServices.category_id == CompanyCategories.id)
             .filter(CompanyCategories.company_id == company_id, CategoryServices.id == service_id))
 
@@ -297,8 +299,8 @@ async def create_service(db: AsyncSession, obj_in: CategoryServiceCreate) -> Cat
         name_ee=obj_in.name_ee,
         name_ru=obj_in.name_ru,
         duration=obj_in.duration,
-        price=int(obj_in.price * 100),  # Store price in cents
-        discount_price=int((obj_in.discount_price or 0) * 100),
+        price=int(obj_in.price),  # Store price in cents
+        discount_price=int((obj_in.discount_price or 0)),
         additional_info_ee=obj_in.additional_info_ee,
         additional_info_en=obj_in.additional_info_en,
         additional_info_ru=obj_in.additional_info_ru,
@@ -316,6 +318,7 @@ async def create_service(db: AsyncSession, obj_in: CategoryServiceCreate) -> Cat
     if obj_in.staff_ids:
         await assign_staff_to_service(db, db_obj.id, obj_in.staff_ids)
 
+    await db.refresh(db_obj)
     return db_obj
 
 
@@ -374,10 +377,12 @@ async def assign_staff_to_service(db: AsyncSession, service_id: UUID4, staff_ids
     """
     for staff_id in staff_ids:
         # Check if assignment already exists
-        stmt = select(ServiceStaff).filter(
-            ServiceStaff.service_id == service_id,
-            ServiceStaff.user_id == staff_id
-        )
+        stmt = (select(ServiceStaff)
+            .options(selectinload(ServiceStaff.user))
+            .filter(
+                ServiceStaff.service_id == service_id,
+                ServiceStaff.user_id == staff_id
+            ))
         result = await db.execute(stmt)
         existing = result.scalar_one_or_none()
 
@@ -397,6 +402,7 @@ async def get_service_staff(db: AsyncSession, service_id: UUID4) -> List[Service
     """
     stmt = (select(ServiceStaff)
             .options(selectinload(ServiceStaff.user))
+            .options(selectinload(ServiceStaff.service))
             .filter(ServiceStaff.service_id == service_id))
     result = await db.execute(stmt)
     staff = result.scalars().all()

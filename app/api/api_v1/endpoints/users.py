@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query, Request, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from fastapi.responses import RedirectResponse, JSONResponse
 
@@ -136,7 +136,7 @@ async def verify_email(
                 message="Verification token not found"
             )
 
-        if token.status != VerificationStatus.PENDING or token.expires_at < datetime.now():
+        if token.status != VerificationStatus.PENDING or token.expires_at < datetime.now(timezone.utc):
             response.status_code = status.HTTP_400_BAD_REQUEST
             return DataResponse.error_response(
                 status_code=status.HTTP_400_BAD_REQUEST,
