@@ -14,7 +14,7 @@ class NotificationService:
         pass
 
     @staticmethod
-    def create_notification(
+    async def create_notification(
             db: Session,
             notification_request: NotificationCreate
     ) -> bool:
@@ -30,7 +30,7 @@ class NotificationService:
         """
         try:
             
-            notification = crud_notification.create_company_notification(db=db, notification=notification_request)
+            notification = await crud_notification.create_company_notification(db=db, notification=notification_request)
             if notification:
                 return True
         except Exception as e:

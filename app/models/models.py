@@ -29,8 +29,8 @@ class Users(BaseModel):
     phone = Column(String(20), nullable=False)
     status = Column(SQLAlchemyEnum(CustomerStatusType), default=CustomerStatusType.pending_verification)
     email_verified = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     languages = Column(String(255), nullable=True)
     position = Column(String(255), nullable=True)
     profile_photo_url = Column(String(510), nullable=True)
@@ -48,9 +48,9 @@ class UserVerifications(BaseModel):
     token = Column(String(255), nullable=False, unique=True)
     type = Column(SQLAlchemyEnum(VerificationType), nullable=False)
     status = Column(SQLAlchemyEnum(VerificationStatus), default=VerificationStatus.PENDING)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=utcnow)
-    used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    used_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class UserAvailabilities(BaseModel):
@@ -62,8 +62,8 @@ class UserAvailabilities(BaseModel):
     start_time = Column(Time, nullable=False)  # Store only time (HH:MM)
     end_time = Column(Time, nullable=False)    # Store only time (HH:MM)
     is_available = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     __table_args__ = (
         # Add constraint to ensure start_time is before end_time
@@ -78,13 +78,13 @@ class UserTimeOffs(BaseModel):
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True, unique=True)
     user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"))
-    start_date = Column(DateTime, nullable=False)
-    end_date = Column(DateTime, nullable=False)
+    start_date = Column(DateTime(timezone=True), nullable=False)
+    end_date = Column(DateTime(timezone=True), nullable=False)
     reason = Column(Text)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    user = relationship("Users", back_populates="user_time_offs")
+    user = relationship("Users", back_populates="user_time_offs", lazy="selectin")
 
 
 class Companies(BaseModel):
@@ -98,8 +98,8 @@ class Companies(BaseModel):
     description = Column(Text)
     team_size = Column(Integer, default=1)
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     slug = Column(
         String,
         Computed("REPLACE(LOWER(name), ' ', '-')", persisted=True)
@@ -115,8 +115,8 @@ class CompanyEmails(BaseModel):
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     email = Column(String(255), nullable=False, unique=True)
     status = Column(SQLAlchemyEnum(EmailStatusType), default=EmailStatusType.unverified)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class CompanyPhones(BaseModel):
     __tablename__ = "company_phones"
@@ -126,8 +126,8 @@ class CompanyPhones(BaseModel):
     phone = Column(String(20), nullable=False)
     is_primary = Column(Boolean, default=False)
     status = Column(SQLAlchemyEnum(PhoneStatusType), default=PhoneStatusType.unverified)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class CompanyAddresses(BaseModel):
     __tablename__ = "company_addresses"
@@ -139,8 +139,8 @@ class CompanyAddresses(BaseModel):
     zip = Column(String(20))
     country = Column(String(100), nullable=False)
     is_primary = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class CompanyUsers(BaseModel):
@@ -151,8 +151,8 @@ class CompanyUsers(BaseModel):
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     role = Column(SQLAlchemyEnum(CompanyRoleType), default=CompanyRoleType.viewer)  # e.g., admin, member
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.inactive)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user = relationship("Users", back_populates="company_user")
 
@@ -170,8 +170,8 @@ class Customers(BaseModel):
     phone = Column(String(20), nullable=False)
     status = Column(SQLAlchemyEnum(CustomerStatusType), default=CustomerStatusType.pending_verification)
     email_verified = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     booking = relationship("Bookings", back_populates="customer")
 
@@ -182,8 +182,8 @@ class CustomerEmails(BaseModel):
     customer_id = Column(UUID, ForeignKey("customers.id", ondelete="CASCADE"))
     email = Column(String(255), nullable=False, unique=True)
     status = Column(SQLAlchemyEnum(EmailStatusType), default=EmailStatusType.unverified)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class CustomerPhones(BaseModel):
     __tablename__ = "customer_phones"
@@ -193,8 +193,8 @@ class CustomerPhones(BaseModel):
     phone = Column(String(20), nullable=False)
     is_primary = Column(Boolean, default=False)
     status = Column(SQLAlchemyEnum(PhoneStatusType), default=PhoneStatusType.unverified)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class CustomerAddresses(BaseModel):
     __tablename__ = "customer_addresses"
@@ -207,8 +207,8 @@ class CustomerAddresses(BaseModel):
     zip = Column(String(20))
     country = Column(String(100), nullable=False)
     is_primary = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class CustomerVerifications(BaseModel):
     __tablename__ = "customer_verifications"
@@ -218,9 +218,9 @@ class CustomerVerifications(BaseModel):
     token = Column(String(255), nullable=False, unique=True)
     type = Column(SQLAlchemyEnum(VerificationType), nullable=False)
     status = Column(SQLAlchemyEnum(VerificationStatus), default=VerificationStatus.PENDING)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=utcnow)
-    used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    used_at = Column(DateTime(timezone=True), nullable=True)
 
 class Bookings(BaseModel):
     __tablename__ = "bookings"
@@ -229,13 +229,13 @@ class Bookings(BaseModel):
     customer_id = Column(UUID, ForeignKey("customers.id", ondelete="CASCADE"), nullable=True)
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
     status = Column(SQLAlchemyEnum(BookingStatus), default=BookingStatus.SCHEDULED)
-    start_at = Column(DateTime, nullable=False)
-    end_at = Column(DateTime, nullable=False)
+    start_at = Column(DateTime(timezone=True), nullable=False)
+    end_at = Column(DateTime(timezone=True), nullable=False)
     total_price = Column(Integer, nullable=False)
     notes = Column(Text)
 
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     customer = relationship("Customers", back_populates="booking")
     booking_services = relationship("BookingServices", back_populates="booking")
@@ -255,14 +255,14 @@ class CompanyCategories(BaseModel):
     description_en = Column(Text, nullable=True)
     description_ee = Column(Text, nullable=True)
     description_ru = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    category_service = relationship("CategoryServices", back_populates="company_category")
+    category_service = relationship("CategoryServices", back_populates="company_category", lazy='selectin')
     subcategories = relationship("CompanyCategories",
                                   backref="parent",
                                   remote_side=[id],
-                                  cascade="all, delete")
+                                  cascade="all, delete", lazy='selectin')
 
     @hybrid_property
     def services_count(self):
@@ -305,8 +305,8 @@ class CategoryServices(BaseModel):
     buffer_before = Column(Integer, default=0)  # in minutes
     buffer_after = Column(Integer, default=0)   # in minutes
     image_url = Column(String(510), nullable=True)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     company_category = relationship("CompanyCategories", back_populates="category_service")
     # booking_category_services = relationship("BookingServices", back_populates="category_service")
@@ -319,8 +319,8 @@ class ServiceStaff(BaseModel):
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     service_id = Column(UUID, ForeignKey("category_services.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     service = relationship("CategoryServices", back_populates="service_staff")
     user = relationship("Users")
@@ -338,10 +338,10 @@ class BookingServices(BaseModel):
     category_service_id = Column(UUID, ForeignKey("category_services.id", ondelete="CASCADE"))
     user_id = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"))
     notes = Column(Text)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
-    start_at = Column(DateTime, nullable=True)
-    end_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    start_at = Column(DateTime(timezone=True), nullable=True)
+    end_at = Column(DateTime(timezone=True), nullable=True)
 
     booking = relationship("Bookings", back_populates="booking_services")
     # category_service = relationship("CategoryServices", back_populates="booking_category_services")
@@ -358,8 +358,8 @@ class CompanyNotifications(BaseModel):
     status = Column(SQLAlchemyEnum(NotificationStatus), default=NotificationStatus.UNREAD)
     message = Column(Text, nullable=False)
     data = Column(LargeBinary, nullable=True)  # JSON or additional data
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class MembershipPlans(BaseModel):
@@ -373,8 +373,8 @@ class MembershipPlans(BaseModel):
     price = Column(Integer, nullable=False)  # Price in cents
     duration_days = Column(Integer, nullable=False, default=30)  # Subscription duration
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     subscriptions = relationship("CompanyMemberships", back_populates="membership_plan")
 
@@ -386,11 +386,11 @@ class CompanyMemberships(BaseModel):
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     membership_plan_id = Column(UUID, ForeignKey("membership_plans.id", ondelete="CASCADE"), nullable=False)
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
-    start_date = Column(DateTime, nullable=False, default=utcnow)
-    end_date = Column(DateTime, nullable=False)
+    start_date = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    end_date = Column(DateTime(timezone=True), nullable=False)
     auto_renew = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     membership_plan = relationship("MembershipPlans", back_populates="subscriptions")
 
@@ -413,8 +413,8 @@ class TelegramIntegrations(BaseModel):
     bot_token_encrypted = Column(String(255), nullable=False)
     chat_id = Column(String(255), nullable=True)
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     __table_args__ = (
         # Ensure a company can only have one active telegram integration
@@ -436,8 +436,8 @@ class Invitations(BaseModel):
     role = Column(SQLAlchemyEnum(CompanyRoleType), default=CompanyRoleType.viewer)
     status = Column(SQLAlchemyEnum(InvitationStatus), default=InvitationStatus.PENDING)
     company_id = Column(UUID, ForeignKey("companies.id", ondelete="CASCADE"))
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     company = relationship("Companies", back_populates="invitations")
 

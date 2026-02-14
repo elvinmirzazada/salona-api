@@ -294,7 +294,7 @@ async def create_booking(
             'company_id': str(booking.company_id)
         }).encode('utf-8')
 
-        _ = notification_service.create_notification(
+        _ = await notification_service.create_notification(
             db=db,
             notification_request=CompanyNotificationCreate(
                 company_id=booking_in.company_id,

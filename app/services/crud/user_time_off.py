@@ -71,7 +71,7 @@ async def create(db: AsyncSession, *, obj_in: TimeOffCreate, company_id: Optiona
         company_user = result.scalar_one_or_none()
 
         if not company_user:
-            raise ValueError(f"User {obj_in.user_id} does not belong to company {obj_in.company_id}")
+            raise ValueError(f"User {obj_in.user_id} does not belong to company {company_id}")
 
     db_obj = UserTimeOffs(
         # id=uuid.uuid4(),
@@ -83,7 +83,7 @@ async def create(db: AsyncSession, *, obj_in: TimeOffCreate, company_id: Optiona
     )
     db.add(db_obj)
     await db.commit()
-    await db.refresh(db_obj)
+    await db.refresh(db_obj, )
     return db_obj
 
 
