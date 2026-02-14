@@ -101,6 +101,7 @@ class CompanyBase(BaseModel):
     website: Optional[str] = None
     description: Optional[str] = None
     team_size: Optional[int] = 0
+    timezone: Optional[str] = "UTC"
     status: StatusType = StatusType.active
     slug: Optional[str] = None
 
@@ -116,6 +117,7 @@ class CompanyUpdate(BaseModel):
     website: Optional[str] = None
     description: Optional[str] = None
     team_size: Optional[int] = None
+    timezone: Optional[str] = None
     status: Optional[StatusType] = None
 
 

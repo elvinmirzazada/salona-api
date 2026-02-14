@@ -97,6 +97,7 @@ class Companies(BaseModel):
     website = Column(String(255))
     description = Column(Text)
     team_size = Column(Integer, default=1)
+    timezone = Column(String(100), default='UTC')
     status = Column(SQLAlchemyEnum(StatusType), default=StatusType.active)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

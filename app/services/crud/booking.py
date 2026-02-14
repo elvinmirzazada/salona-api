@@ -54,22 +54,14 @@ async def get_all_bookings_in_range(db: AsyncSession, start_date: date, end_date
 
 
 async def get_all_bookings_in_range_by_company(db: AsyncSession, company_id: str, start_date: date, end_date: date):
-    # Convert dates to UTC datetime, then remove timezone info since DB expects naive datetime
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
 
     stmt = (select(Bookings)
             .options(
-        selectinload(Bookings.booking_services)
-                    .selectinload(BookingServices.assigned_staff),
-                #
-                # selectinload(Bookings.booking_services)
-                #     .selectinload(BookingServices.category_service)
-                #     .selectinload(CategoryServices.service_staff),
-
+        selectinload(Bookings.booking_services).selectinload(BookingServices.assigned_staff),
                 selectinload(Bookings.customer)
             )
-            .join(BookingServices, Bookings.id == BookingServices.booking_id)
             .filter(
                 Bookings.company_id == company_id,
                 Bookings.start_at >= start_datetime,
@@ -77,8 +69,8 @@ async def get_all_bookings_in_range_by_company(db: AsyncSession, company_id: str
                 Bookings.status.in_(['scheduled', 'confirmed', 'completed', 'no_show', 'cancelled'])
             ))
     result = await db.execute(stmt)
-    return result.scalars().all()
-
+    bookings = result.scalars().all()
+    return bookings
 
 async def check_staff_availability(db: AsyncSession, user_id: UUID4, start_time: datetime, end_time: datetime, exclude_booking_id: Optional[UUID4] = None) -> tuple[bool, Optional[str]]:
     """
