@@ -844,11 +844,8 @@ async def update_company_member(
                 status_code=status.HTTP_404_NOT_FOUND
             )
 
-        # Get the updated company user with user details
-        company_user = await crud_company.get_company_user(db=db, company_id=company_id, user_id=user_id)
-
         return DataResponse.success_response(
-            data=company_user,
+            data=updated_company_user,
             message="Company member updated successfully",
             status_code=status.HTTP_200_OK
         )
@@ -856,7 +853,7 @@ async def update_company_member(
     except Exception as e:
         await db.rollback()
         return DataResponse.error_response(
-            message=f"Failed to update company member: {str(e)}",
+            message=f"Failed to update company member",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 

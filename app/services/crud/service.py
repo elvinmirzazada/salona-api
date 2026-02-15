@@ -335,9 +335,9 @@ async def update_service(db: AsyncSession, db_obj: CategoryServices, obj_in: Cat
 
     # Handle price conversion
     if obj_in.price is not None:
-        obj_in.price = int(obj_in.price * 100)
+        obj_in.price = int(obj_in.price)
     if obj_in.discount_price is not None:
-        obj_in.discount_price = int(obj_in.discount_price * 100)
+        obj_in.discount_price = int(obj_in.discount_price)
 
     update_data = obj_in.model_dump(exclude_unset=True)
 

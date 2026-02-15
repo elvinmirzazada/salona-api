@@ -1,20 +1,19 @@
 import uuid
 
-from pydantic.v1 import create_model_from_typeddict
-from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, UniqueConstraint, UUID,
+from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Text, ForeignKey, UniqueConstraint, UUID,
                         Time, Computed,
-                        CheckConstraint, false, BLOB, LargeBinary, Index, select)
+                        CheckConstraint, LargeBinary, Index)
 from sqlalchemy.dialects.postgresql import ENUM as SQLAlchemyEnum
-from sqlalchemy.orm import relationship, column_property
-from sqlalchemy.sql import func
-from sqlalchemy.sql import expression
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import expression
 
+from app.core.datetime_utils import utcnow
 from app.db.base_class import BaseModel
 from app.models.enums import (StatusType, BookingStatus, CustomerStatusType, EmailStatusType,
                               PhoneStatusType, VerificationType, VerificationStatus,
-                              CompanyRoleType, NotificationType, NotificationStatus, MembershipPlanType, InvitationStatus)
-from app.core.datetime_utils import utcnow
+                              CompanyRoleType, NotificationType, NotificationStatus, MembershipPlanType,
+                              InvitationStatus)
 
 
 #
@@ -35,9 +34,9 @@ class Users(BaseModel):
     position = Column(String(255), nullable=True)
     profile_photo_url = Column(String(510), nullable=True)
 
-    company_user = relationship("CompanyUsers", back_populates="user")
-    user_time_offs = relationship("UserTimeOffs", back_populates="user")
-    booked_services = relationship("BookingServices", back_populates="assigned_staff")
+    company_user = relationship("CompanyUsers", back_populates="user", lazy='selectin')
+    user_time_offs = relationship("UserTimeOffs", back_populates="user", lazy='selectin')
+    booked_services = relationship("BookingServices", back_populates="assigned_staff", lazy='selectin')
 
 
 class UserVerifications(BaseModel):
@@ -155,7 +154,7 @@ class CompanyUsers(BaseModel):
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    user = relationship("Users", back_populates="company_user")
+    user = relationship("Users", back_populates="company_user", lazy='selectin')
 
     __table_args__ = (UniqueConstraint('user_id', 'company_id', name='_user_company_uc'),)
 
@@ -238,8 +237,8 @@ class Bookings(BaseModel):
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    customer = relationship("Customers", back_populates="booking")
-    booking_services = relationship("BookingServices", back_populates="booking")
+    customer = relationship("Customers", back_populates="booking", lazy='selectin')
+    booking_services = relationship("BookingServices", back_populates="booking", lazy='selectin')
 
 
 class CompanyCategories(BaseModel):
@@ -309,9 +308,9 @@ class CategoryServices(BaseModel):
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    company_category = relationship("CompanyCategories", back_populates="category_service")
-    # booking_category_services = relationship("BookingServices", back_populates="category_service")
-    service_staff = relationship("ServiceStaff", back_populates="service")
+    company_category = relationship("CompanyCategories", back_populates="category_service", lazy='selectin')
+    booking_category_services = relationship("BookingServices", back_populates="category_service", lazy='selectin')
+    service_staff = relationship("ServiceStaff", back_populates="service", lazy='selectin')
 
 
 class ServiceStaff(BaseModel):
@@ -344,9 +343,9 @@ class BookingServices(BaseModel):
     start_at = Column(DateTime(timezone=True), nullable=True)
     end_at = Column(DateTime(timezone=True), nullable=True)
 
-    booking = relationship("Bookings", back_populates="booking_services")
-    # category_service = relationship("CategoryServices", back_populates="booking_category_services")
-    assigned_staff = relationship("Users", back_populates="booked_services")
+    booking = relationship("Bookings", back_populates="booking_services", lazy='selectin')
+    category_service = relationship("CategoryServices", back_populates="booking_category_services", lazy='selectin')
+    assigned_staff = relationship("Users", back_populates="booked_services", lazy='selectin')
 
 
 

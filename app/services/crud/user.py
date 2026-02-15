@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pydantic.v1 import UUID4
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.models import CompanyUsers, CustomerStatusType
 from app.models.models import Users, UserVerifications
@@ -16,7 +17,7 @@ from app.schemas.schemas import (
 from app.core.datetime_utils import utcnow
 
 
-async def get(db: AsyncSession, id: UUID4) -> Optional[Users]:
+async def get(db: AsyncSession, id: UUID4) -> Optional[tuple[Users, UUID4]]:
     stmt = (select(Users, CompanyUsers.company_id)
             .outerjoin(CompanyUsers, CompanyUsers.user_id == Users.id)
             .filter(Users.id == id))
@@ -108,6 +109,7 @@ async def get_company_users(db: AsyncSession, company_id: str) -> List[CompanyUs
     Get all users for a company
     """
     stmt = (select(CompanyUsers)
+            .options(selectinload(CompanyUsers.user))
             .join(Users, Users.id == CompanyUsers.user_id)
             .filter(Users.status == 'active',
                     CompanyUsers.company_id == company_id,

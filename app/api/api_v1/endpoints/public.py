@@ -5,8 +5,9 @@ from datetime import datetime, timezone, date, timedelta
 from typing import List
 from pydantic.v1 import UUID4
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
 from app.models import NotificationType
@@ -54,21 +55,21 @@ async def get_company_services(
 
 
 @router.get("/companies/{company_slug}/staff", response_model=DataResponse[List[CompanyUser]])
-def get_company_users(
+async def get_company_users(
     company_slug: str,
     db: Session = Depends(get_db)
 ) -> DataResponse:
     """
     Get users by company ID with details.
     """
-    company = crud_company.get_by_slug(db=db, slug=company_slug)
+    company = await crud_company.get_by_slug(db=db, slug=company_slug)
     if not company:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Company not found"
         )
     company_id = str(company.id)
-    users = crud_user.get_company_users(db=db, company_id=company_id)
+    users = await crud_user.get_company_users(db=db, company_id=company_id)
     if not users:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -100,7 +101,7 @@ async def get_user_availability(
     If service_ids are provided, the last available slot will be calculated based on the total duration of all services.
     """
     try:
-        company = crud_company.get_by_slug(db=db, slug=company_slug)
+        company = await crud_company.get_by_slug(db=db, slug=company_slug)
         if not company:
             response.status_code = status.HTTP_404_NOT_FOUND
             return DataResponse.error_response(
@@ -114,13 +115,13 @@ async def get_user_availability(
         if service_ids:
             total_duration = 0
             for service_id in service_ids:
-                service = crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
+                service = await crud_service.get_service(db=db, service_id=service_id, company_id=company_id)
                 if service:
                     total_duration += service.duration
             service_duration_minutes = total_duration if total_duration > 0 else None
 
         # Get user's regular availability
-        availabilities = crud_company.get_company_user_availabilities(db, user_id=user_id, company_id=company_id)
+        availabilities = await crud_company.get_company_user_availabilities(db, user_id=user_id, company_id=company_id)
         if not availabilities:
             response.status_code = status.HTTP_200_OK
             return DataResponse.success_response(
@@ -133,7 +134,7 @@ async def get_user_availability(
             )
 
         # Get user's time-offs
-        time_offs = crud_company.get_company_user_time_offs(
+        time_offs = await crud_company.get_company_user_time_offs(
             db,
             user_id=user_id,
             company_id=company_id,
@@ -145,7 +146,7 @@ async def get_user_availability(
         )
 
         # Get existing bookings
-        bookings = crud_booking.get_user_bookings_in_range(
+        bookings = await crud_booking.get_user_bookings_in_range(
             db,
             user_id=user_id,
             start_date=date_from,
@@ -190,7 +191,7 @@ async def get_user_availability(
 @router.post("/companies/{company_slug}/bookings", response_model=DataResponse[Booking], status_code=status.HTTP_201_CREATED)
 async def create_booking(
         *,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         booking_in: BookingCreate,
         company_slug: str,
         response: Response
@@ -204,7 +205,7 @@ async def create_booking(
     customer = None
 
     # Verify that the company exists
-    selected_company = crud_company.get_by_slug(db=db, slug=company_slug)
+    selected_company = await crud_company.get_by_slug(db=db, slug=company_slug)
     if not selected_company:
         response.status_code = status.HTTP_404_NOT_FOUND
         raise DataResponse.error_response(
@@ -224,7 +225,7 @@ async def create_booking(
             )
         if booking_in.customer_info.id:
             # If customer_info contains an ID, try to fetch that customer
-            existing_customer = crud_customer.get(db, id=booking_in.customer_info.id)
+            existing_customer = await crud_customer.get(db, id=booking_in.customer_info.id)
             if existing_customer:
                 customer = existing_customer
             else:
@@ -247,11 +248,11 @@ async def create_booking(
             )
 
             # Check if customer with this email already exists
-            existing_customer = crud_customer.get_by_email(db, email=str(customer_data.email))
+            existing_customer = await crud_customer.get_by_email(db, email=str(customer_data.email))
             if existing_customer:
                 customer = existing_customer
             else:
-                customer = crud_customer.create(db, obj_in=customer_data)
+                customer = await crud_customer.create(db, obj_in=customer_data)
 
     # Validate booking times
     if booking_in.start_time < datetime.now(timezone.utc):
@@ -263,7 +264,7 @@ async def create_booking(
     selected_company_users = defaultdict(list)
     for selected_company_service in booking_in.services:
         # Verify that the service exists and belongs to the company
-        company_service = crud_service.get_service(db=db, service_id=selected_company_service.category_service_id,
+        company_service = await crud_service.get_service(db=db, service_id=selected_company_service.category_service_id,
                                                    company_id=selected_company.id)
         if not company_service:
             response.status_code = status.HTTP_404_NOT_FOUND
@@ -274,7 +275,7 @@ async def create_booking(
 
         # Verify that the user(worker) exists and belongs to the company
         if selected_company_service.user_id:
-            selected_user = crud_user.get(db=db, id=selected_company_service.user_id)
+            selected_user = await crud_user.get(db=db, id=selected_company_service.user_id)
             if not selected_user:
                 response.status_code = status.HTTP_404_NOT_FOUND
                 raise DataResponse.error_response(
@@ -284,7 +285,7 @@ async def create_booking(
             selected_company_users[selected_user[0].id].append((selected_user[0], company_service))
 
     try:
-        booking = crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
+        booking = await crud_booking.create(db=db, obj_in=booking_in, customer_id=customer.id)
         response.status_code = status.HTTP_201_CREATED
         # publish_event('booking_created', str({'info': f"A new booking has been created by {customer.first_name} {customer.last_name}"}))
 
@@ -306,9 +307,11 @@ async def create_booking(
 
         # Get company address for calendar location
         from app.models.models import CompanyAddresses
-        company_address = db.query(CompanyAddresses).filter(
-            CompanyAddresses.company_id == selected_company.id
-        ).first()
+        stmt = (select(CompanyAddresses)
+                .filter(CompanyAddresses.company_id == selected_company.id))
+
+        result = await db.execute(stmt)
+        company_address = result.first()
         location = None
         if company_address:
             location = f"{company_address.address}, {company_address.city}, {company_address.country}"
@@ -344,14 +347,14 @@ async def create_booking(
                 booking_id=booking.id
             )
 
-        db.commit()
+        await db.commit()
         return DataResponse.success_response(
             message="",
             data=booking,
             status_code=status.HTTP_201_CREATED
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return DataResponse.error_response(
             message=f"Failed to create booking: {str(e)}",
@@ -361,17 +364,17 @@ async def create_booking(
 
 
 @router.get("/bookings/{booking_id}", response_model=DataResponse[Booking])
-def get_booking(
+async def get_booking(
         *,
         booking_id: str,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         response: Response
 ) -> DataResponse:
     """
     Get booking by ID with details.
     """
     booking_id = UUID4(booking_id)
-    booking = crud_booking.get(db=db, id=booking_id)
+    booking = await crud_booking.get(db=db, id=booking_id)
     if not booking:
         response.status_code = status.HTTP_404_NOT_FOUND
         raise DataResponse.error_response(

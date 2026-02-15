@@ -1,6 +1,7 @@
 from typing import List, Optional, Any
 from datetime import datetime, date, time, timedelta
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
 import uuid
 from app.models.models import UserAvailabilities, UserTimeOffs
 from app.models.enums import AvailabilityType
@@ -15,7 +16,7 @@ from app.schemas.schemas import (
 from app.core.datetime_utils import utcnow
 
 
-def create_user_availability(db: Session, user_id: str, availability_in: UserAvailabilityCreate) -> UserAvailabilities:
+async def create_user_availability(db: AsyncSession, user_id: str, availability_in: UserAvailabilityCreate) -> UserAvailabilities:
     """Create a new availability entry for a user"""
     db_availability = UserAvailabilities(
         id=str(uuid.uuid4()),
@@ -28,12 +29,12 @@ def create_user_availability(db: Session, user_id: str, availability_in: UserAva
         updated_at=utcnow()
     )
     db.add(db_availability)
-    db.commit()
-    db.refresh(db_availability)
+    await db.commit()
+    await db.refresh(db_availability)
     return db_availability
 
 
-def bulk_create_user_availabilities(db: Session, user_id: str, availabilities: List[UserAvailabilityCreate]) -> List[UserAvailabilities]:
+async def bulk_create_user_availabilities(db: AsyncSession, user_id: str, availabilities: List[UserAvailabilityCreate]) -> List[UserAvailabilities]:
     """Create multiple availability entries for a user"""
     db_availabilities = []
     for availability_in in availabilities:
@@ -50,57 +51,69 @@ def bulk_create_user_availabilities(db: Session, user_id: str, availabilities: L
         db_availabilities.append(db_availability)
     
     db.add_all(db_availabilities)
-    db.commit()
+    await db.commit()
     for db_availability in db_availabilities:
-        db.refresh(db_availability)
+        await db.refresh(db_availability)
     return db_availabilities
 
 
-def delete_user_availabilities(db: Session, user_id: str) -> bool:
+async def delete_user_availabilities(db: AsyncSession, user_id: str) -> bool:
     """Delete all availability entries for a user"""
-    db.query(UserAvailabilities).filter(UserAvailabilities.user_id == user_id).delete()
-    db.commit()
+    stmt = delete(UserAvailabilities).filter(UserAvailabilities.user_id == user_id)
+    await db.execute(stmt)
+    await db.commit()
     return True
 
 
-def update_user_availabilities(db: Session, user_id: str, availabilities: List[UserAvailabilityCreate]) -> List[UserAvailabilities]:
+async def update_user_availabilities(db: AsyncSession, user_id: str, availabilities: List[UserAvailabilityCreate]) -> List[UserAvailabilities]:
     """Replace all availability entries for a user with new ones"""
     # Delete existing availabilities
-    delete_user_availabilities(db, user_id)
-    
+    await delete_user_availabilities(db, user_id)
+
     # Create new availabilities
     if availabilities:
-        return bulk_create_user_availabilities(db, user_id, availabilities)
+        return await bulk_create_user_availabilities(db, user_id, availabilities)
     return []
 
 
-def get_user_availabilities(db: Session, user_id: str) -> List[UserAvailabilities]:
+async def get_user_availabilities(db: AsyncSession, user_id: str) -> List[UserAvailabilities]:
     """Get all availability entries for a user"""
-    return list(db.query(UserAvailabilities).filter(UserAvailabilities.user_id == user_id,
-                                                    UserAvailabilities.is_available == True).all())
+    stmt = select(UserAvailabilities).filter(
+        UserAvailabilities.user_id == user_id,
+        UserAvailabilities.is_available == True
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
-def get_user_time_offs(
-    db: Session,
+async def get_user_time_offs(
+    db: AsyncSession,
     user_id: str,
     start_date: date,
     end_date: date
 ) -> List["UserTimeOffs"]:
     """Get all time-offs for a user within a date range"""
-    return db.query(UserTimeOffs).filter(
+    stmt = select(UserTimeOffs).filter(
         UserTimeOffs.user_id == user_id,
         UserTimeOffs.start_date <= end_date,
-        UserTimeOffs.end_date >= start_date).all()
+        UserTimeOffs.end_date >= start_date
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
-def get_all_availabilities(db: Session):
+async def get_all_availabilities(db: AsyncSession):
     """Get all available user availabilities"""
-    return db.query(UserAvailabilities).filter(UserAvailabilities.is_available == True).all()
+    stmt = select(UserAvailabilities).filter(UserAvailabilities.is_available == True)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
-def get_all_time_offs(db: Session, start_date: date, end_date: date):
+async def get_all_time_offs(db: AsyncSession, start_date: date, end_date: date):
     """Get all time-offs within a date range"""
-    return db.query(UserTimeOffs).filter(
+    stmt = select(UserTimeOffs).filter(
         UserTimeOffs.start_date <= end_date,
         UserTimeOffs.end_date >= start_date
-    ).all()
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 def subtract_intervals(base_start: time, base_end: time, intervals: List[tuple]) -> List[tuple]:
     """Subtract intervals (bookings/time-offs) from a base interval. Returns list of available intervals."""

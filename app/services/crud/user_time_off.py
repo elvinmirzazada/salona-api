@@ -154,25 +154,28 @@ async def check_overlapping_time_offs(
     return count > 0
 
 
+async def get_company_user_time_offs(
+        db: AsyncSession,
+        company_id: str,
+        start_date: date = None,
+        end_date: date = None
+) -> List[UserTimeOffs]:
+    """
+    Get all time-offs for all users in a company with optional date filtering
+    """
+    stmt = (select(UserTimeOffs)
+            .join(CompanyUsers, CompanyUsers.user_id == UserTimeOffs.user_id)
+            .filter(CompanyUsers.company_id == company_id))
 
-# def get_company_user_time_offs(
-#         db: Session,
-#         company_id: str,
-#         start_date: date = None,
-#         end_date: date = None
-# ) -> List[UserTimeOffs]:
-#     """
-#     Get all time-offs for a user with optional date filtering
-#     """
-    # query = (db.query(UserTimeOffs).join(CompanyUsers, CompanyUsers.user_id == UserTimeOffs.user_id)
-    #          .filter(UserTimeOffs.user_id == user_id,
-    #                  CompanyUsers.company_id == company_id))
-    #
-    # if start_date and end_date:
-    #     # Get time offs that overlap with the given date range
-    #     query = query.filter(
-    #         UserTimeOffs.start_date <= end_date,
-    #         UserTimeOffs.end_date >= start_date
-    #     )
-    #
-    # return list(query.all())
+    if start_date and end_date:
+        # Ensure dates are in UTC
+        start_date_utc = datetime.combine(start_date, datetime.min.time())
+        end_date_utc = datetime.combine(end_date, datetime.max.time())
+        # Get time offs that overlap with the given date range
+        stmt = stmt.filter(
+            UserTimeOffs.start_date <= end_date_utc,
+            UserTimeOffs.end_date >= start_date_utc
+        )
+
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

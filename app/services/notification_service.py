@@ -1,5 +1,7 @@
 import logging
 from typing import Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from app.models.enums import NotificationType
 from app.schemas import NotificationCreate
@@ -15,7 +17,7 @@ class NotificationService:
 
     @staticmethod
     async def create_notification(
-            db: Session,
+            db: AsyncSession,
             notification_request: NotificationCreate
     ) -> bool:
         """

@@ -127,15 +127,11 @@ async def calc_service_params(db: AsyncSession, services: List[BookingServiceReq
 async def create(db: AsyncSession, *, obj_in: BookingCreate, customer_id: UUID4) -> Bookings:
     total_duration, total_price = await calc_service_params(db, obj_in.services, obj_in.company_id)
 
-    # Convert to naive datetime (DB expects TIMESTAMP WITHOUT TIME ZONE)
-    start_time_utc = obj_in.start_time.replace(tzinfo=None) if obj_in.start_time.tzinfo else obj_in.start_time
-    end_time_utc = start_time_utc + timedelta(minutes=total_duration)
-
     db_obj = Bookings(
         customer_id=customer_id,
         company_id=obj_in.company_id,
-        start_at=start_time_utc,
-        end_at=end_time_utc,
+        start_at=obj_in.start_time,
+        end_at=obj_in.start_time + timedelta(minutes=total_duration),
         total_price=total_price,
         notes=obj_in.notes,
         status=BookingStatus.CONFIRMED
@@ -143,7 +139,7 @@ async def create(db: AsyncSession, *, obj_in: BookingCreate, customer_id: UUID4)
     db.add(db_obj)
     await db.commit()
 
-    current_start_time = start_time_utc
+    current_start_time = obj_in.start_time
     for srv in obj_in.services:
         if not srv.user_id:
             company_users = await get_company_users(db, str(obj_in.company_id))

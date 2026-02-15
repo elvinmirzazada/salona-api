@@ -3,7 +3,7 @@ from typing import Optional, List
 from datetime import date
 from pydantic.v1 import UUID4
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 
 from app.models import CompanyRoleType, StatusType, UserAvailabilities, UserTimeOffs, CategoryServices, \
@@ -43,6 +43,7 @@ async def get_company_users(db: AsyncSession, company_id: str) -> List[CompanyUs
 async def get_company_user(db: AsyncSession, company_id: str, user_id: str) -> Optional[CompanyUser]:
     """Get company user with user details."""
     stmt = (select(CompanyUsers)
+            .options(selectinload(CompanyUsers.user))  # Eager load user details
             .join(Users, Users.id == CompanyUsers.user_id)
             .filter(CompanyUsers.company_id == company_id, CompanyUsers.user_id == user_id))
     result = await db.execute(stmt)
@@ -407,40 +408,46 @@ async def update_company_user(db: AsyncSession, *, company_id: str, user_id: str
     """
     from app.services.crud import user_availability as crud_user_availability
 
-    stmt = select(CompanyUsers).filter(
+    stmt = (select(CompanyUsers)
+        .options(selectinload(CompanyUsers.user))  # Eager load user details
+        .filter(
         CompanyUsers.company_id == company_id,
         CompanyUsers.user_id == user_id
-    )
+    ))
     result = await db.execute(stmt)
     company_user = result.scalar_one_or_none()
 
     if not company_user:
         return None
 
-    # Extract availabilities if present
+    # Extract availabilities before converting to dict
     availabilities = obj_in.availabilities
-    obj_in = obj_in.model_dump(exclude={'availabilities'})
+
+    # Convert to dict, excluding availabilities and unset fields
+    update_data = obj_in.model_dump(exclude_unset=True, exclude={'availabilities'})
 
     # Separate company_user fields from user fields
     company_user_fields = {'role', 'status'}
     user_fields = {'first_name', 'last_name', 'phone', 'languages', 'position', 'profile_photo_url'}
 
     # Update CompanyUsers fields
-    for field, value in obj_in.items():
-        if field in company_user_fields and hasattr(company_user, field) and value is not None:
+    for field, value in update_data.items():
+        if field in company_user_fields and hasattr(company_user, field):
             setattr(company_user, field, value)
 
     # Update User fields
-    stmt = select(Users).filter(Users.id == user_id)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    user_updates = {field: value for field, value in update_data.items() if field in user_fields}
+    if user_updates:
+        stmt = select(Users).filter(Users.id == user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
 
-    if user:
-        for field, value in obj_in.items():
-            if field in user_fields and hasattr(user, field) and value is not None:
-                setattr(user, field, value)
-        user.updated_at = utcnow()
-        db.add(user)
+        if user:
+            for field, value in user_updates.items():
+                if hasattr(user, field):
+                    setattr(user, field, value)
+            user.updated_at = utcnow()
+            db.add(user)
 
     # Update timestamp
     company_user.updated_at = utcnow()
@@ -449,10 +456,30 @@ async def update_company_user(db: AsyncSession, *, company_id: str, user_id: str
     await db.commit()
     await db.refresh(company_user)
 
-    # Handle availabilities update
+    # Handle availabilities update - only if explicitly provided (not None)
+    # If availabilities is None, it means it wasn't sent in the request
+    # If availabilities is [], it means explicitly clearing all availabilities
+    # If availabilities has items, it means updating with new availabilities
     if availabilities is not None:
-        await crud_user_availability.update_user_availabilities(db, user_id, availabilities)
+        stmt = delete(UserAvailabilities).filter(UserAvailabilities.user_id == user_id)
+        await db.execute(stmt)
 
+        db_availabilities = []
+        for availability_in in availabilities:
+            db_availability = UserAvailabilities(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                day_of_week=availability_in.day_of_week,
+                start_time=availability_in.start_time,
+                end_time=availability_in.end_time,
+                is_available=availability_in.is_available,
+                created_at=utcnow(),
+                updated_at=utcnow()
+            )
+            db_availabilities.append(db_availability)
+
+        db.add_all(db_availabilities)
+        await db.commit()
     return company_user
 
 
@@ -486,4 +513,3 @@ async def delete_company_user(db: AsyncSession, *, company_id: str, user_id: str
     await db.commit()
 
     return True
-

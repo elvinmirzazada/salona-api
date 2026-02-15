@@ -90,7 +90,13 @@ class CompanyUser(TimestampedModel):
 class CompanyUserUpdate(BaseModel):
     role: Optional[str] = None
     status: Optional[StatusType] = None
-    availabilities: List[UserAvailabilityCreate] = []
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    languages: Optional[str] = None
+    position: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+    availabilities: Optional[List[UserAvailabilityCreate]] = None
 
 
 # Company schemas
