@@ -190,7 +190,7 @@ async def get_user_availability(
 
 
 
-@router.post("/companies/{company_slug}/bookings", response_model=DataResponse[Booking], status_code=status.HTTP_201_CREATED)
+@router.post("/companies/{company_slug}/bookings", response_model=DataResponse, status_code=status.HTTP_201_CREATED)
 async def create_booking(
         *,
         db: AsyncSession = Depends(get_db),
@@ -351,8 +351,8 @@ async def create_booking(
 
         await db.commit()
         return DataResponse.success_response(
-            message="",
-            data=booking,
+            message="Successfully created booking",
+            data=None,
             status_code=status.HTTP_201_CREATED
         )
     except Exception as e:
