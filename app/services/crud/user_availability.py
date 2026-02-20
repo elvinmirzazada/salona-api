@@ -13,7 +13,7 @@ from app.schemas.schemas import (
     AvailabilityResponse,
     UserAvailabilityCreate
 )
-from app.core.datetime_utils import utcnow
+from app.core.datetime_utils import utcnow, convert_utc_to_timezone
 
 
 async def create_user_availability(db: AsyncSession, user_id: str, availability_in: UserAvailabilityCreate) -> UserAvailabilities:
@@ -133,18 +133,31 @@ def subtract_intervals(base_start: time, base_end: time, intervals: List[tuple])
         result = new_result
     return result
 
-def get_daily_slots(target_date: date, availabilities: List[UserAvailabilities], time_offs: List[UserTimeOffs], bookings: List[Any], service_duration_minutes: Optional[int] = None) -> DailyAvailability:
+def get_daily_slots(target_date: date, availabilities: List[UserAvailabilities], time_offs: List[UserTimeOffs], bookings: List[Any], service_duration_minutes: Optional[int] = None, company_timezone: str = "UTC") -> DailyAvailability:
     day_of_week = target_date.weekday()
     day_availabilities = [a for a in availabilities if a.day_of_week == day_of_week]
     # Collect intervals to subtract (bookings and time-offs)
     subtract_intervals_list = []
+
+    # Process time-offs: convert from UTC to company timezone
     for time_off, user_id in time_offs:
-        if time_off.start_date.date() <= target_date <= time_off.end_date.date():
-            subtract_intervals_list.append((time(time_off.start_date.hour,time_off.start_date.minute),
-                                            time(time_off.end_date.hour,time_off.end_date.minute)))
+        # Convert UTC datetime to company timezone
+        start_date_local = convert_utc_to_timezone(time_off.start_date, company_timezone)
+        end_date_local = convert_utc_to_timezone(time_off.end_date, company_timezone)
+
+        if start_date_local.date() <= target_date <= end_date_local.date():
+            subtract_intervals_list.append((time(start_date_local.hour, start_date_local.minute),
+                                            time(end_date_local.hour, end_date_local.minute)))
+
+    # Process bookings: convert from UTC to company timezone
     for booking in bookings:
-        if booking.start_at.date() == target_date:
-            subtract_intervals_list.append((booking.start_at.time(), booking.end_at.time()))
+        # Convert UTC datetime to company timezone
+        start_at_local = convert_utc_to_timezone(booking.start_at, company_timezone)
+        end_at_local = convert_utc_to_timezone(booking.end_at, company_timezone)
+
+        if start_at_local.date() == target_date:
+            subtract_intervals_list.append((start_at_local.time(), end_at_local.time()))
+
     time_slots = []
     for avail in day_availabilities:
         available_intervals = subtract_intervals(avail.start_time, avail.end_time, subtract_intervals_list)
@@ -186,7 +199,8 @@ def calculate_availability(
     bookings: List[Any],
     availability_type: AvailabilityType,
     date_from: date,
-    service_duration_minutes: Optional[int] = None
+    service_duration_minutes: Optional[int] = None,
+    company_timezone: str = "UTC"
 ) -> AvailabilityResponse:
     """Calculate availability based on working hours, time-offs, and bookings"""
     try:
@@ -199,7 +213,7 @@ def calculate_availability(
                 monthly=None
             )
         if availability_type == AvailabilityType.DAILY:
-            daily = get_daily_slots(date_from, availabilities, time_offs, bookings, service_duration_minutes)
+            daily = get_daily_slots(date_from, availabilities, time_offs, bookings, service_duration_minutes, company_timezone)
             return AvailabilityResponse(
                 user_id=str(availabilities[0].user_id),
                 availability_type=availability_type,
@@ -211,7 +225,7 @@ def calculate_availability(
             daily_slots = []
             current_date = week_start
             while current_date <= week_end:
-                daily_slots.append(get_daily_slots(current_date, availabilities, time_offs, bookings, service_duration_minutes))
+                daily_slots.append(get_daily_slots(current_date, availabilities, time_offs, bookings, service_duration_minutes, company_timezone))
                 current_date += timedelta(days=1)
             weekly = WeeklyAvailability(
                 week_start_date=week_start,
@@ -238,7 +252,7 @@ def calculate_availability(
                 week_date = week_start
                 while week_date <= week_end:
                     if month_start <= week_date <= month_end:
-                        daily_slots.append(get_daily_slots(week_date, availabilities, time_offs, bookings, service_duration_minutes))
+                        daily_slots.append(get_daily_slots(week_date, availabilities, time_offs, bookings, service_duration_minutes, company_timezone))
                     week_date += timedelta(days=1)
                 weekly_slots.append(WeeklyAvailability(
                     week_start_date=week_start,

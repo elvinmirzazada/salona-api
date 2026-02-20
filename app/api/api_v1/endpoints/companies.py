@@ -76,6 +76,16 @@ async def get_user_availability(
     If service_ids are provided, the last available slot will be calculated based on the total duration of all services.
     """
     try:
+        # Get company to access timezone setting
+        company = await crud_company.get(db=db, id=company_id)
+        if not company:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="Company not found",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        company_timezone = company.timezone or "UTC"
+
         # Calculate total service duration if service_ids are provided
         service_duration_minutes = None
         if service_ids:
@@ -130,7 +140,8 @@ async def get_user_availability(
                 bookings=bookings,
                 availability_type=availability_type,
                 date_from=date_from,
-                service_duration_minutes=service_duration_minutes
+                service_duration_minutes=service_duration_minutes,
+                company_timezone=company_timezone
             )
 
             return DataResponse.success_response(
@@ -166,6 +177,16 @@ async def get_company_all_users_availabilities(
     Get availabilities for all users for a specific time range. Optimized to fetch all data in bulk and group bookings by user via BookingServices.
     """
     try:
+        # Get company to access timezone setting
+        company = await crud_company.get(db=db, id=company_id)
+        if not company:
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return DataResponse.error_response(
+                message="Company not found",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        company_timezone = company.timezone or "UTC"
+
         company_users = await crud_company.get_company_users(db, company_id)
         if not company_users:
             response.status_code = status.HTTP_404_NOT_FOUND
@@ -215,7 +236,8 @@ async def get_company_all_users_availabilities(
                 time_offs=user_timeoffs,
                 bookings=user_bookings,
                 availability_type=availability_type,
-                date_from=date_from
+                date_from=date_from,
+                company_timezone=company_timezone
             )
             results.append(availability)
         if not results:

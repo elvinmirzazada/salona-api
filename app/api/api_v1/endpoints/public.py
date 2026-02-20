@@ -109,6 +109,7 @@ async def get_user_availability(
                 status_code=status.HTTP_404_NOT_FOUND
             )
         company_id = str(company.id)
+        company_timezone = company.timezone or "UTC"
 
         # Calculate total service duration if service_ids are provided
         service_duration_minutes = None
@@ -164,7 +165,8 @@ async def get_user_availability(
                 bookings=bookings,
                 availability_type=availability_type,
                 date_from=date_from,
-                service_duration_minutes=service_duration_minutes
+                service_duration_minutes=service_duration_minutes,
+                company_timezone=company_timezone
             )
 
             return DataResponse.success_response(
@@ -311,7 +313,7 @@ async def create_booking(
                 .filter(CompanyAddresses.company_id == selected_company.id))
 
         result = await db.execute(stmt)
-        company_address = result.first()
+        company_address = result.scalars().first()
         location = None
         if company_address:
             location = f"{company_address.address}, {company_address.city}, {company_address.country}"

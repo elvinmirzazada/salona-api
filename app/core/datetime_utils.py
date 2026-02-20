@@ -4,6 +4,7 @@ All datetime operations should use UTC timezone for consistency.
 """
 from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 
 def utcnow() -> datetime:
@@ -86,3 +87,26 @@ def make_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
     
     # Convert to UTC and remove timezone info
     return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def convert_utc_to_timezone(dt: Optional[datetime], tz_name: str) -> Optional[datetime]:
+    """
+    Convert a UTC datetime to a specific timezone.
+
+    Args:
+        dt: Input datetime (should be UTC)
+        tz_name: Target timezone name (e.g., 'America/New_York', 'Europe/London')
+
+    Returns:
+        datetime: Timezone-aware datetime in the target timezone, or None if input is None
+    """
+    if dt is None:
+        return None
+
+    # Ensure the datetime is in UTC first
+    utc_dt = ensure_utc(dt)
+
+    # Convert to target timezone
+    target_tz = ZoneInfo(tz_name)
+    return utc_dt.astimezone(target_tz)
+
