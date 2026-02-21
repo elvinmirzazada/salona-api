@@ -577,18 +577,16 @@ async def refresh_token(
             value=new_tokens["refresh_token"],
             max_age=new_tokens['rt_expires_in'],
             httponly=True,
-            secure=is_production,
-            samesite="lax",
-            domain=cookie_domain
+            secure=True,  # only over HTTPS
+            samesite="none"
         )
         response.set_cookie(
             key="access_token",
             value=new_tokens["access_token"],
             max_age=new_tokens['at_expires_in'],
             httponly=True,
-            secure=is_production,
-            samesite="lax",
-            domain=cookie_domain
+            secure=True,  # only over HTTPS
+            samesite="none"
         )
 
         return DataResponse.success_response(data=TokenResponse(**new_tokens))
