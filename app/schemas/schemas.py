@@ -277,7 +277,7 @@ class BookingService(TimestampedModel):
     end_at: Optional[datetime] = None    # Changed from end_date to match DB column
 
     category_service: Optional[CategoryServiceResponse] = None
-    user: Optional[User] = None  # Changed from assigned_staff to match the model relationship
+    assigned_staff: Optional[User] = None  # Changed from assigned_staff to match the model relationship
 
 
 class Booking(BookingBase, TimestampedModel):
