@@ -63,7 +63,7 @@ async def _create_new_user(
     )
 
     if send_verification_email:
-        # Send verification email
+        # Send verification email — failure is non-fatal, user is still created
         try:
             user_name = f"{new_user.first_name} {new_user.last_name}"
             email_sent = email_service.send_verification_email(
@@ -72,14 +72,14 @@ async def _create_new_user(
                 user_name=user_name
             )
         except Exception as e:
-            await db.rollback()
             logger.error(f"Error sending verification email: {str(e)}")
             email_sent = False
 
         if not email_sent:
-            raise Exception(f"Warning: Failed to send verification email to {new_user.email}")
-
-        message = "User created successfully. Please check your email to verify your account."
+            logger.warning(f"Failed to send verification email to {new_user.email}. User was still created.")
+            message = "User created successfully. Verification email could not be sent — please request a new one."
+        else:
+            message = "User created successfully. Please check your email to verify your account."
     else:
         # Auto-verify email for OAuth users
         await crud_user.verify_token(db=db, db_obj=verification_record)
