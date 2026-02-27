@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from app.core.config import settings
 from app.api.api_v1.api import api_router
 from starlette.middleware.cors import CORSMiddleware
@@ -47,6 +48,23 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    # Collect all human-readable messages
+    messages = []
+    for error in errors:
+        msg = error.get("msg", "")
+        # Strip pydantic's "Value error, " prefix
+        if msg.lower().startswith("value error, "):
+            msg = msg[len("value error, "):]
+        messages.append(msg)
+    return JSONResponse(
+        status_code=400,
+        content={"message": " | ".join(messages), "success": True, "status_code": 400},
+    )
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

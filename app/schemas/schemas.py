@@ -56,6 +56,24 @@ class UserCreate(UserBase):
     password: str
     availabilities: Optional[List[UserAvailabilityCreate]] = []
 
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        errors = []
+        if len(v) < 8:
+            errors.append("at least 8 characters")
+        if not any(c.isupper() for c in v):
+            errors.append("at least one uppercase letter")
+        if not any(c.islower() for c in v):
+            errors.append("at least one lowercase letter")
+        if not any(c.isdigit() for c in v):
+            errors.append("at least one digit")
+        if not any(c in "!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in v):
+            errors.append("at least one special character (!@#$%^&*()_+-=[]{}|;':\",./<>?)")
+        if errors:
+            raise ValueError("Password must contain " + ", ".join(errors))
+        return v
+
 
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
