@@ -33,5 +33,6 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             set -e
+            cp "../.env" "${{ secrets.SSH_TARGET_DIR }}/.env"
             cd "${{ secrets.SSH_TARGET_DIR }}"
             docker compose up --build -d
