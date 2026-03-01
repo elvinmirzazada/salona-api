@@ -1,5 +1,5 @@
 services:
-  api:
+  backend:
     build: .
     ports:
       - "8011:8011"
