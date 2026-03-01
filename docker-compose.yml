@@ -1,8 +1,9 @@
 services:
   backend:
     build: .
-    ports:
-      - "8011:8011"
+    container_name: fastapi_app
+    expose:
+      - "8011"
     env_file:
       - .env
     networks:
