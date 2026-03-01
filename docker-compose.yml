@@ -2,12 +2,10 @@ services:
   backend:
     build: .
     container_name: fastapi_app
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 #    expose:
 #      - "8080"
     ports:
-      - "8080:8080"
+      - "8011:8011"
     env_file:
       - .env
     networks:

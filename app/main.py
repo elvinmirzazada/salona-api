@@ -23,9 +23,6 @@ origins = [
     "http://0.0.0.0:3000",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
-    "http://95.217.191.242",
-    "http://95.217.191.242:80",
-    "http://95.217.191.242:8080",
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:5173",
@@ -77,7 +74,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 @app.get("/")
 def root():
-    publish_event("booking_created", 'testing 123')
+    # publish_event("booking_created", 'testing 123')
     return {"message": "Welcome to Salona Business API"}
 
 
