@@ -25,6 +25,7 @@ origins = [
     "http://127.0.0.1:3001",
     "http://95.217.191.242:3000",
     "http://95.217.191.242:8011",
+    "http://95.217.191.242",
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:5173",
