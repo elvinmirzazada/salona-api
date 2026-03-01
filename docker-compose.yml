@@ -5,3 +5,9 @@ services:
       - "8011:8011"
     env_file:
       - .env
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    external: true
